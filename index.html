@@ -1,0 +1,991 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>星际战机 - StarFighter</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh;font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC","WenQuanYi Micro Hei",sans-serif}
+canvas{display:block;cursor:none}
+#ui{position:absolute;top:10px;left:0;right:0;display:flex;justify-content:space-between;padding:0 20px;pointer-events:none;z-index:10}
+#ui>div{color:#0ff;font-size:16px;text-shadow:0 0 10px #0ff,0 0 20px #0ff;letter-spacing:2px}
+#wave-bar-wrap{position:absolute;top:32px;left:20px;width:200px;height:10px;background:rgba(255,255,255,0.1);border:1px solid rgba(0,255,255,0.3);border-radius:5px;z-index:10;pointer-events:none;overflow:hidden}
+#wave-bar-fill{height:100%;background:linear-gradient(90deg,#0ff,#0f0);border-radius:4px;width:0%;transition:width .3s}
+#rest-timer{position:absolute;top:32px;right:20px;color:#ff0;font-size:14px;text-shadow:0 0 10px #ff0;z-index:10;pointer-events:none;display:none}
+#hunt-indicator{position:absolute;top:40px;left:50%;transform:translateX(-50%);color:#f44;font-size:14px;font-weight:bold;text-shadow:0 0 10px #f00;z-index:10;pointer-events:none;display:none;animation:pulse .5s infinite}
+#overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;justify-content:center;align-items:center;z-index:20;pointer-events:none;text-align:center}
+#overlay h1{font-size:50px;color:#fff;text-shadow:0 0 30px #0ff,0 0 60px #f0f;letter-spacing:6px;margin-bottom:15px}
+#overlay h2{font-size:28px;color:#ff0;text-shadow:0 0 15px #ff0;margin:10px 0}
+#overlay p{color:#0ff;font-size:18px;letter-spacing:2px;text-shadow:0 0 10px #0ff;margin:5px 0}
+#overlay .start{font-size:24px;color:#ff0;animation:pulse 1.5s infinite;text-shadow:0 0 20px #ff0;margin-top:30px}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+#overlay .tips{color:#888;font-size:13px;margin-top:20px}
+#shop{position:absolute;top:0;left:0;right:0;bottom:0;display:none;z-index:25;flex-direction:column;align-items:center;justify-content:flex-start;padding:30px;overflow-y:auto;background:rgba(0,0,0,0.94)}
+#shop h2{color:#ff0;font-size:32px;text-shadow:0 0 20px #ff0;margin-bottom:8px}
+#shop h3{color:#0ff;font-size:20px;margin-bottom:12px}
+#shop .shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;width:100%;max-width:950px}
+#shop .shop-item{background:rgba(0,20,40,0.9);border:2px solid #0ff;border-radius:10px;padding:14px;color:#fff;font-size:13px;pointer-events:auto;cursor:pointer;transition:all .2s}
+#shop .shop-item:hover{border-color:#ff0;box-shadow:0 0 15px rgba(255,255,0,0.3);transform:scale(1.02)}
+#shop .shop-item.locked{opacity:.5;border-color:#555}
+#shop .shop-item.locked:hover{border-color:#888}
+#shop .shop-item .sname{font-size:15px;font-weight:bold;color:#ff0;margin-bottom:4px}
+#shop .shop-item .sdesc{color:#aaa;font-size:11px;margin-bottom:6px}
+#shop .shop-item .sprob{color:#0f0;font-size:12px}
+#shop .shop-item .scost{color:#f80;font-size:17px;font-weight:bold}
+#shop .shop-item .smaxed{color:#ff0;font-weight:bold;font-size:17px}
+#shop .close-btn{pointer-events:auto;margin-top:18px;padding:10px 40px;font-size:20px;background:#f44;color:#fff;border:none;border-radius:8px;cursor:pointer}
+#boss-hp-bar{position:absolute;top:50px;left:50%;transform:translateX(-50%);width:400px;height:14px;background:#333;border:2px solid #f00;border-radius:7px;z-index:15;display:none}
+#boss-hp-fill{height:100%;background:linear-gradient(90deg,#f00,#f80);border-radius:5px;width:100%;transition:width .1s}
+#boss-name{position:absolute;top:28px;left:50%;transform:translateX(-50%);color:#f00;font-size:18px;font-weight:bold;text-shadow:0 0 10px #f00;z-index:15;display:none}
+#active-effects{position:absolute;top:60px;right:20px;z-index:10;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.effect-tag{background:rgba(0,0,0,0.75);color:#0f0;font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid rgba(0,255,0,0.3)}
+#crisis-warning{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#f00;font-size:36px;font-weight:bold;text-shadow:0 0 30px #f00,0 0 60px #f80;z-index:8;pointer-events:none;display:none;animation:pulse .5s infinite}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui">
+  <div id="ui-score">得分: 0</div>
+  <div id="ui-coins">
+  <div id="ui-btcoins" style="color:#f80;font-size:16px;text-shadow:0 0 10px #f80,0 0 20px #f80;">???: 0</div>
+  能量币: 0</div>
+  <div id="ui-lives">生命: ♥♥♥</div>
+  <div id="ui-level">波次: 1</div>
+</div>
+<div id="wave-bar-wrap"><div id="wave-bar-fill"></div></div>
+<div id="rest-timer"></div>
+<div id="hunt-indicator">⚠ 追杀模式 ⚠</div>
+<div id="overlay">
+  <h1>🚀 星际战机 🚀</h1>
+  <p>消灭所有外星入侵者！</p>
+  <p class="start">点击屏幕或按空格开始</p>
+  <p class="tips">WASD/方向键移动 | 鼠标左键射击 | 空格射击 | S商店 | P暂停(休整期)</p>
+</div>
+<div id="shop">
+  <h2>🏪 技能商店</h2>
+  <h3 id="shop-coins">能量币: 0</h3>
+  <div class="shop-grid" id="shop-grid"></div>
+  <button class="close-btn" id="shop-close">关闭商店 (S)</button>
+</div>
+<div id="boss-hp-bar"><div id="boss-hp-fill"></div></div>
+<div id="boss-name"></div>
+<div id="active-effects"></div>
+<div id="crisis-warning">⚠ 危机预演 ⚠</div>
+<script>(function(){
+"use strict";
+var canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+var overlay=document.getElementById("overlay");
+var shopEl=document.getElementById("shop"),shopGrid=document.getElementById("shop-grid"),shopCoinsEl=document.getElementById("shop-coins");
+var bossHpBar=document.getElementById("boss-hp-bar"),bossHpFill=document.getElementById("boss-hp-fill"),bossNameEl=document.getElementById("boss-name");
+var activeEffectsEl=document.getElementById("active-effects");
+var waveBarFill=document.getElementById("wave-bar-fill");
+var restTimerEl=document.getElementById("rest-timer");
+var huntIndicator=document.getElementById("hunt-indicator");
+var crisisWarning=document.getElementById("crisis-warning");
+var uiScore=document.getElementById("ui-score"),uiCoins=document.getElementById("ui-coins");
+var uiLives=document.getElementById("ui-lives"),uiLevel=document.getElementById("ui-level"),uiBtcoins=document.getElementById("ui-btcoins");
+var W,H;
+function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+window.addEventListener("resize",resize);resize();
+
+var audioCtx;
+function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
+function playSound(freq,type,dur,vol,slide){
+  if(!audioCtx)return;
+  try{var o=audioCtx.createOscillator(),g=audioCtx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);
+  if(slide)o.frequency.linearRampToValueAtTime(freq+slide,audioCtx.currentTime+dur);
+  g.gain.setValueAtTime(vol||0.1,audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+  o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur);}catch(e){}
+}
+
+var gameState="menu",score=0,lives=3,level=1,energyCoins=0;
+var player=null,enemies=[],bullets=[],enemyBullets=[],particles=[],stars=[],powerUps=[],boss=null;
+var fireTimer=0,enemySpawnTimer=0,invincibleTimer=0,shakeTimer=0,shakeIntensity=0;
+var mouseX=0,mouseY=0,keys={};
+var defeatedBossCount=0;
+var breakthroughCoins=0;
+var playerMissiles=[];
+var missileTimer=0;
+var laserTimer=0;
+var activeLaser=null;
+var missileLevel=0;
+var nukeUseCount=0;
+var nukeDisabledWaves=0;
+var dodgeLevel=0;
+
+// ---- NEW MECHANICS STATE ----
+var waveProgress=0;       // 0-100% per wave
+var waveKills=0;          // kills in current wave
+var playerIdleTime=0;     // frames player hasn't moved
+var lastPlayerX=0,lastPlayerY=0;
+var markCount=0;          // enemy proximity marks on idle player
+var huntMode=false;       // true when lives < 2
+var restTimer=0;          // rest period countdown in seconds
+var restActive=false;     // is rest period active
+var crisisWave=false;     // pre-boss wave flag
+var crisisSpawnBoost=0;   // extra spawn multiplier during crisis
+var lastWave=1;           // track wave changes for rest period trigger
+var playerMoving=false;   // track movement per frame
+// ---- END NEW MECHANICS ----
+
+var skillDefs=[
+  {id:"heal",name:"生命恢复",desc:"恢复1点生命值",icon:"♥",color:"#0f0",initUnlocked:true,initProb:20},
+  {id:"power",name:"火力升级",desc:"子弹+1排(最高10级·突破币解锁LV6-10)",icon:"▲",color:"#ff0",initUnlocked:true,initProb:15,maxLv:10,breakLv:5},
+  {id:"shield",name:"能量护盾",desc:"10秒无敌护盾",icon:"◈",color:"#0ff",initUnlocked:true,initProb:10},
+  {id:"highDmg",name:"高伤弹药",desc:"2倍伤害 持续15秒",icon:"◆",color:"#f80",initUnlocked:true,initProb:12},
+  {id:"coinBonus",name:"金币加成",desc:"立即获得200能量币",icon:"$",color:"#ff0",initUnlocked:false,unlockCost:300,initProb:8},
+  {id:"freeze",name:"冰冻减速",desc:"所有敌人减速80% 持续8秒",icon:"❄",color:"#8cf",initUnlocked:false,unlockCost:500,initProb:7},
+  {id:"nuke",name:"全屏清敌",desc:"瞬间摧毁所有敌人",icon:"☢",color:"#f0f",initUnlocked:false,unlockCost:800,initProb:5},
+  {id:"pierce",name:"穿透弹",desc:"子弹穿透敌人 持续15秒",icon:"⚡",color:"#ff0",initUnlocked:false,unlockCost:1000,initProb:6},
+  {id:"scoreX2",name:"分数加倍",desc:"2倍得分 持续20秒",icon:"★",color:"#f80",initUnlocked:false,unlockCost:600,initProb:6},
+  {id:"slowTime",name:"时间减速",desc:"敌弹速度减半 持续6秒(突破:10秒)",icon:"⏱",color:"#8f8",initUnlocked:false,unlockCost:1200,initProb:5},
+  {id:"missile",name:"导弹支援",desc:"永久导弹支援·叠加缩短间隔(10s→1s)",icon:"▸",color:"#f80",initUnlocked:false,unlockCost:800,initProb:8},
+  {id:"laser",name:"激光炮",desc:"每10秒发射粗激光穿透全屏(突破:6秒)",icon:"‖",color:"#f0f",initUnlocked:false,unlockCost:100000,initProb:4,special:true,specialCoinCost:1},
+  {id:"dodge",name:"闪避",desc:"概率闪避攻击(最高50%·需突破币解锁)",icon:"↗",color:"#8f8",initUnlocked:false,unlockCost:0,initProb:0,maxLv:5,special:true,specialCoinCost:1}
+];
+
+var shopItems=[];
+function initShopItems(){
+  shopItems=[];
+  for(var i=0;i<skillDefs.length;i++){
+    var d=skillDefs[i];
+    var s={id:d.id,name:d.name,desc:d.desc,icon:d.icon,color:d.color,
+      unlocked:d.initUnlocked,probability:d.initUnlocked?d.initProb:0,
+      unlockCost:d.unlockCost||0,upgradeCost:0,probLevel:d.initUnlocked?1:0,maxProb:75,
+      maxLv:d.maxLv||99,breakLv:d.breakLv||99,
+      breakthroughActive:false,special:d.special||false,specialCoinCost:d.specialCoinCost||0};
+    shopItems.push(s);
+  }
+  updateShopCosts();renderShopUI();
+}
+function updateShopCosts(){
+  for(var i=0;i<shopItems.length;i++){
+    var s=shopItems[i];
+    if(s.probability>=s.maxProb){s.upgradeCost=0;continue;}
+    s.upgradeCost=s.unlocked?Math.floor(100+Math.pow(s.probLevel+1,2)*40):s.unlockCost;
+  }
+}
+function upgradeShopItem(id){
+  var s=null;
+  for(var i=0;i<shopItems.length;i++){if(shopItems[i].id===id){s=shopItems[i];break;}}
+  if(!s)return;
+  if(!s.unlocked){
+    // Special skills can use breakthrough coin instead of credits
+    var unlockCost=s.unlockCost;
+    if(s.special&&s.specialCoinCost&&breakthroughCoins>=s.specialCoinCost){
+      breakthroughCoins-=s.specialCoinCost;s.unlocked=true;s.probability=s.id==="dodge"?10:(s.initProb||5);s.probLevel=1;
+      if(s.id==="dodge")dodgeLevel=1;
+      playSound(800,"sine",0.3,0.15,400);updateShopCosts();renderShopUI();return;
+    }
+    if(energyCoins<unlockCost)return;
+    energyCoins-=unlockCost;s.unlocked=true;s.probability=s.initProb||5;s.probLevel=1;
+    playSound(800,"sine",0.2,0.1,200);
+  }else{
+    // Handle breakthrough for firepower LV6-10
+    if(s.id==="power"&&s.probLevel===s.breakLv&&!s.breakthroughActive&&breakthroughCoins>0){
+      breakthroughCoins--;s.breakthroughActive=true;s.maxProb=75;
+      playSound(1200,"sine",0.25,0.15,500);updateShopCosts();renderShopUI();return;
+    }
+    // Breakthrough for maxed skills: spend 1 breakthrough coin to enhance effect
+    if(s.probability>=s.maxProb&&!s.breakthroughActive&&breakthroughCoins>0){
+      breakthroughCoins--;s.breakthroughActive=true;
+      playSound(1200,"sine",0.3,0.2,600);updateShopCosts();renderShopUI();return;
+    }
+    if(s.probability>=s.maxProb)return;
+    var cost=s.upgradeCost;
+    if(energyCoins<cost)return;
+    energyCoins-=cost;s.probLevel++;s.probability=Math.min(s.maxProb,s.probability+5);
+    if(s.id==="dodge")dodgeLevel=s.probLevel;
+    playSound(1000,"sine",0.15,0.08,300);
+  }
+  updateShopCosts();renderShopUI();
+}
+function renderShopUI(){
+  var html="<div style='color:#f80;font-size:20px;margin-bottom:10px'>💎 突破币: "+breakthroughCoins+"</div>";
+  for(var i=0;i<shopItems.length;i++){
+    var s=shopItems[i];
+    var cls=s.unlocked?"":" locked";
+    var costHtml="";
+    if(!s.unlocked){
+      if(s.special&&s.specialCoinCost)costHtml='<div class="scost">解锁: '+s.unlockCost+' 币 或 '+s.specialCoinCost+' 突破币</div>';
+      else costHtml='<div class="scost">解锁: '+s.unlockCost+' 币</div>';
+    }else if(s.id==="power"&&s.probLevel===s.breakLv&&!s.breakthroughActive){
+      costHtml='<div class="scost" style="color:#f80">突破LV6-10: 1 突破币</div>';
+    }else if(s.probability>=s.maxProb&&!s.breakthroughActive){
+      costHtml='<div class="scost" style="color:#f80">💎 突破强化: 1 突破币</div>';
+    }else if(s.probability>=s.maxProb){
+      costHtml='<div class="smaxed">✦ MAX ('+s.maxProb+'%) [已突破]</div>';
+    }else{
+      costHtml='<div class="scost">升级: '+s.upgradeCost+' 币 → '+Math.min(s.maxProb,s.probability+5)+'%</div>';
+    }
+    var extra=s.breakthroughActive?' <span style="color:#f80">[突破]</span>':"";
+    html+='<div class="shop-item'+cls+'" onclick="window._upgrade(\''+s.id+'\')"><div class="sname">'+s.icon+' '+s.name+extra+'</div><div class="sdesc">'+s.desc+'</div><div class="sprob">'+(s.id==="dodge"?'闪避率: '+dodgeLevel*10+'% / 50%':'当前掉落率: '+s.probability+'% / '+s.maxProb+'%')+'</div>'+costHtml+'</div>';
+  }
+  shopGrid.innerHTML=html;
+  shopCoinsEl.textContent="能量币: "+energyCoins+" | 💎 突破币: "+breakthroughCoins;
+}
+window._upgrade=upgradeShopItem;
+
+var bossDefs=[
+  {name:"母舰·毁灭者",color:"#f44",shape:"circle",hpBase:4000,scoreBase:5000,sizeMul:3.5,speed:0.6,
+    behave:function(b){
+      b._t=(b._t||0)+1;
+      if(b.y<H*0.15)b.y+=b.speed*0.8;
+      b.x+=Math.sin(b._t*0.02)*1.5;b.x=Math.max(b.w/2,Math.min(W-b.w/2,b.x));
+      // Burst cycle: 60f fire, 60f rest
+      var cycle=b._t%120;
+      if(cycle>=40&&cycle<100){
+        if(b._t%20===0){
+          for(var k=0;k<3;k++){
+            var a=Math.random()*Math.PI*2;var bspd=1.5+Math.floor(defeatedBossCount/bossDefs.length)*0.5;
+            enemyBullets.push({x:b.x,y:b.y+b.h*0.3,vx:Math.cos(a)*bspd,vy:Math.sin(a)*bspd,w:5,h:5,color:b.color});
+          }
+        }
+      }
+      if(b._t%250===0&&b._t>0){for(var k=0;k<4;k++){var se=spawnEnemy();se.x=b.x+(Math.random()-0.5)*150;se.y=b.y+30;se.speed*=0.7;enemies.push(se);}}
+    }
+  },
+  {name:"守卫者·铁壁",color:"#0cf",shape:"hexagon",hpBase:6000,scoreBase:8000,sizeMul:3.0,speed:0.8,
+    behave:function(b){
+      b._t=(b._t||0)+1;if(!b._cd)b._cd={x:1,y:0};var phase=b._t%180;
+      if(phase<60){b.x+=b._cd.x*2;b.y+=b._cd.y*2;}
+      else if(phase<120&&player){b._cd={x:player.x-b.x,y:player.y-b.y};var d=Math.sqrt(b._cd.x*b._cd.x+b._cd.y*b._cd.y)||1;b._cd.x/=d;b._cd.y/=d;}
+      else{b.x+=b._cd.x*1.5;b.y+=b._cd.y*1.5;}
+      b.x=Math.max(80,Math.min(W-80,b.x));b.y=Math.max(50,Math.min(H*0.4,b.y));
+      // Burst: 40f aimed shots, 80f rest
+      var cycle2=b._t%120;
+      if(cycle2<40&&b._t%8===0&&player){
+        var ang=Math.atan2(player.y-b.y,player.x-b.x);var bspd2=2+Math.floor(defeatedBossCount/bossDefs.length)*0.7;
+        enemyBullets.push({x:b.x,y:b.y+b.h*0.3,vx:Math.cos(ang)*bspd2,vy:Math.sin(ang)*bspd2,w:5,h:5,color:b.color});
+      }
+      if(cycle2===40){for(var k=0;k<6;k++){var a=k*Math.PI*2/6;var bspd2b=1+Math.floor(defeatedBossCount/bossDefs.length)*0.4;enemyBullets.push({x:b.x,y:b.y,vx:Math.cos(a)*bspd2b,vy:Math.sin(a)*bspd2b,w:4,h:4,color:"#f0f"});}}
+    }
+  },
+  {name:"分裂者·增殖",color:"#8f8",shape:"star",hpBase:5000,scoreBase:7000,sizeMul:2.8,speed:0.7,
+    behave:function(b){
+      b._t=(b._t||0)+1;
+      if(!b._split&&b.hp<b.maxHp*0.5){b._split=true;
+        for(var k=0;k<4;k++){var sx=b.x+(Math.random()-0.5)*160,sy=b.y+(Math.random()-0.5)*160;
+          var mini={x:Math.max(60,Math.min(W-60,sx)),y:Math.max(40,sy),w:b.w*0.45,h:b.h*0.45,type:3,hp:Math.floor(b.maxHp*0.25),maxHp:Math.floor(b.maxHp*0.25),score:2000,speed:1.8,color:b.color,shape:"diamond",fireRate:0.03,fireTimer:0,angle:0,wiggle:0.02,dead:false,_mini:true};
+          enemies.push(mini);createExplosion(sx,sy,b.color,15);}}
+      b.y+=Math.sin(b._t*0.03)*1.5;b.x+=Math.cos(b._t*0.025)*2;b.x=Math.max(60,Math.min(W-60,b.x));b.y=Math.max(30,Math.min(H*0.3,b.y));
+      // Burst: 3 rapid volleys, then 110f rest
+      var cycle3=b._t%150;
+      if(cycle3<40&&cycle3%15===0&&player){
+        for(var k=0;k<4;k++){var ang=Math.atan2(player.y-b.y,player.x-b.x)+(k-1.5)*0.2;var bspd3=1.6+Math.floor(defeatedBossCount/bossDefs.length)*0.5;enemyBullets.push({x:b.x,y:b.y+b.h*0.3,vx:Math.cos(ang)*bspd3,vy:Math.sin(ang)*bspd3,w:4,h:4,color:b.color});}
+      }
+    }
+  },
+  {name:"激光龙·灼烧",color:"#f0f",shape:"diamond",hpBase:7500,scoreBase:10000,sizeMul:3.2,speed:0.5,
+    behave:function(b){
+      b._t=(b._t||0)+1;if(!b._tx)b._tx=W/2;
+      if(b._t%180===0)b._tx=Math.random()*(W-200)+100;b.x+=(b._tx-b.x)*0.02;b.y=50+Math.sin(b._t*0.008)*35;b.x=Math.max(80,Math.min(W-80,b.x));
+      // Burst: 15f spiral, then 45f rest
+      var cycle4=b._t%75;
+      if(cycle4<12){
+        var dang=b._t*0.05;
+        for(var k=0;k<8;k++){var a=dang+k*Math.PI*0.25;var bspd4=1.8+Math.floor(defeatedBossCount/bossDefs.length)*0.4;enemyBullets.push({x:b.x,y:b.y+b.h*0.2,vx:Math.cos(a)*bspd4,vy:Math.sin(a)*bspd4,w:4,h:4,color:b.color});}
+      }
+    }
+  }
+];
+function spawnBoss(){
+  var bi=defeatedBossCount%bossDefs.length;var bd=bossDefs[bi];
+  // Repeat scaling: each full cycle through bosses = 1.25x multiplier
+  var cycles=Math.floor(defeatedBossCount/bossDefs.length);
+  var repeatMul=Math.pow(1.25,cycles);
+  var hpMul=repeatMul;
+  boss={x:W/2,y:-80,w:bd.sizeMul*40,h:bd.sizeMul*40,hp:Math.floor(bd.hpBase*hpMul),maxHp:Math.floor(bd.hpBase*hpMul),score:Math.floor(bd.scoreBase*hpMul),speed:bd.speed,color:bd.color,shape:bd.shape,fireRate:bd.fireRate,fireTimer:0,dead:false,_t:0,_split:false,_cd:null,_tx:null,name:bd.name,behave:bd.behave};
+  bossHpBar.style.display="block";bossNameEl.style.display="block";bossNameEl.textContent=boss.name+" (Lv."+(cycles+1)+")";
+  crisisSpawnBoost=0;crisisWarning.style.display="none";
+}
+
+var enemyTypes=[
+  {name:"scout",color:"#f44",hp:1,score:100,speed:2.0,size:22,shape:"diamond",fireRate:0.005,waveMin:0},
+  {name:"fighter",color:"#f80",hp:2,score:200,speed:1.8,size:28,shape:"hexagon",fireRate:0.008,waveMin:0},
+  {name:"bomber",color:"#f0f",hp:4,score:400,speed:1.2,size:36,shape:"circle",fireRate:0.012,waveMin:0},
+  {name:"elite",color:"#ff0",hp:6,score:800,speed:1.6,size:30,shape:"star",fireRate:0.015,waveMin:0},
+  // NEW: Wave 50+
+  {name:"狙击手",color:"#f0f",hp:5,score:500,speed:1.0,size:24,shape:"diamond",fireRate:0.025,waveMin:50,
+    behave:function(e){if(!e._ang)e._ang=0;if(e.fireTimer%40===0&&player){e._ang=Math.atan2(player.y-e.y,player.x-e.x);enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(e._ang)*7,vy:Math.sin(e._ang)*7,w:3,h:10,color:e.color});}}
+  },
+  // Wave 100+
+  {name:"蜂群",color:"#0f0",hp:2,score:150,speed:3.0,size:16,shape:"circle",fireRate:0.003,waveMin:100,
+    behave:function(e){if(!e._swarm)e._swarm=Math.random()*Math.PI*2;e._swarm+=0.03;e.x+=Math.sin(e._swarm)*3;e.wiggle=0.08;}
+  },
+  // Wave 150+
+  {name:"航母",color:"#88f",hp:12,score:1000,speed:0.8,size:44,shape:"hexagon",fireRate:0.01,waveMin:150,
+    behave:function(e){e._t=(e._t||0)+1;if(e._t%180===0&&e.y<H*0.4){for(var k=0;k<3;k++){var se=spawnEnemy();se.x=e.x+(Math.random()-0.5)*80;se.y=e.y+20;se.type=0;se.hp=1;se.speed*=1.2;enemies.push(se);}}}
+  },
+  // Wave 200+
+  {name:"幽灵",color:"rgba(255,255,255,0.4)",hp:3,score:400,speed:1.4,size:26,shape:"star",fireRate:0.02,waveMin:200,
+    behave:function(e){e._t=(e._t||0)+1;e.alpha=0.3+Math.sin(e._t*0.05)*0.3;if(e._t%90===0){var a=Math.random()*Math.PI*2;enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(a)*5,vy:Math.sin(a)*5,w:3,h:3,color:"rgba(255,255,255,0.6)"});}}
+  },
+  // Wave 250+
+  {name:"冲撞者",color:"#f44",hp:8,score:600,speed:4.5,size:32,shape:"diamond",fireRate:0.0,waveMin:250,
+    behave:function(e){if(!e._chg)e._chg=0;if(player){e._chg+=0.02;var dx=player.x-e.x,dy=player.y-e.y,d=Math.sqrt(dx*dx+dy*dy)||1;e.x+=dx/d*Math.min(e._chg,4);e.y+=dy/d*Math.min(e._chg,4);}if(Math.abs(e.x-player.x)<30&&Math.abs(e.y-player.y)<30){e.hp=0;}}
+  },
+  // Wave 300+
+  {name:"织网者",color:"#f80",hp:4,score:350,speed:1.5,size:22,shape:"circle",fireRate:0.03,waveMin:300,
+    behave:function(e){e._t=(e._t||0)+1;e.x+=Math.sin(e._t*0.05)*5;if(e._t%8===0&&e.y<H*0.7){var a=e._t*0.3;enemyBullets.push({x:e.x,y:e.y,vx:Math.cos(a)*3,vy:Math.sin(a)*3,w:3,h:3,color:e.color});}}
+  }
+];
+function createPlayer(){return{x:W/2,y:H-100,w:40,h:48,speed:6,powerLevel:1,shieldActive:false,shieldTimer:0};}
+
+// ---- MODIFIED spawnEnemy with hunting mode, crisis boost, wave-based types, speed cap ----
+function spawnEnemy(){
+  // MECHANISM 3: markCount increases enemy tier probability
+  var tierBoost=Math.min(markCount*0.05,0.4);
+  var r=Math.random(),ti=0;
+  // NEW: wave-based enemy selection - choose from available types
+  var availTypes=[];
+  for(var k=0;k<enemyTypes.length;k++){if(level>=enemyTypes[k].waveMin)availTypes.push(k);}
+  if(availTypes.length===0)availTypes=[0,1,2,3];
+  var ti=availTypes[Math.floor(Math.random()*availTypes.length)];
+  // Bias toward higher tiers with markCount
+  if(Math.random()<tierBoost&&availTypes.length>2)ti=availTypes[Math.min(availTypes.length-1,Math.floor(Math.random()*availTypes.length*0.7+availTypes.length*0.3))];
+  var t=enemyTypes[ti];
+  // NEW: HP scaling capped at 20x base, speed capped at 3.0
+  var hpMul=Math.min(20,1+(level-1)*0.08);
+  var spdMul=Math.min(1.8,1+(level-1)*0.01);
+  
+  // MECHANISM 2: hunting mode - bias spawn toward player"s x
+  var sx;
+  if(huntMode&&Math.random()<0.55){
+    sx=player.x+(Math.random()-0.5)*Math.min(200,W*0.3);
+  }else{
+    sx=Math.random()*W;
+  }
+  
+  // MECHANISM 5: crisis wave boost (pre-boss)
+  var spd=Math.min(t.speed*spdMul,3.0);
+  if(crisisWave)spd=Math.min(t.speed*spdMul*1.3,3.0);
+  
+  return{x:sx,y:-30,w:t.size,h:t.size,hp:Math.ceil(t.hp*hpMul),maxHp:Math.ceil(t.hp*hpMul),score:t.score,
+    speed:spd,color:t.color,shape:t.shape,fireRate:t.fireRate,
+    fireTimer:Math.random()*100,angle:Math.random()*Math.PI*2,
+    wiggle:Math.random()*0.03-0.015,dead:false,type:ti,behave:t.behave||null};
+}
+// ---- END MODIFIED spawnEnemy ----
+
+// Helper: check if a skill has breakthrough active
+function getShopBreakthrough(id){
+  for(var i=0;i<shopItems.length;i++){if(shopItems[i].id===id)return shopItems[i].breakthroughActive;}
+  return false;
+}
+
+function spawnPowerUp(x,y){
+  var avail=[];
+  for(var i=0;i<shopItems.length;i++){
+    if(shopItems[i].unlocked&&shopItems[i].probability>0){
+      // Nuke disabled check
+      if(shopItems[i].id==="nuke"&&(nukeDisabledWaves>0||crisisWave))continue;
+      avail.push(shopItems[i]);}}
+  if(avail.length===0)return;
+  // Normalize: sum all probabilities, then pick weighted
+  var totalProb=0;
+  for(var i=0;i<avail.length;i++)totalProb+=avail[i].probability;
+  var r=Math.random()*totalProb,cum=0;
+  for(var i=0;i<avail.length;i++){cum+=avail[i].probability;if(r<cum){powerUps.push({x:x,y:y,w:18,h:18,type:avail[i].id,vy:1.2,life:400,glow:0});return;}}
+  powerUps.push({x:x,y:y,w:18,h:18,type:avail[0].id,vy:1.2,life:400,glow:0});
+}
+
+function createExplosion(x,y,color,count){
+  count=count||15;
+  for(var i=0;i<count;i++){var ang=Math.random()*Math.PI*2,spd=Math.random()*5+2;particles.push({x:x,y:y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,life:25+Math.random()*15,maxLife:40,color:color,size:Math.random()*3+1.5});}
+}
+
+// ---- MODIFIED killEnemy with wave progress acceleration ----
+function killEnemy(e){
+  if(e.dead)return;
+  e.dead=true;
+  createExplosion(e.x,e.y,e.color,15+(e.type||0)*8);
+  var sc=e.score||100;
+  score+=sc*(activeEffects.scoreX2?(activeEffects.scoreX2.multiplier||2):1);
+  var cd=Math.floor(sc*0.3+Math.random()*5);
+  energyCoins+=cd;
+  waveKills++;totalEnemiesKilled++;
+  // MECHANISM 1: each kill adds wave progress
+  waveProgress+=1.5+(e.type||0)*0.5;
+  waveProgress=Math.min(100,waveProgress);
+  playSound(200-(e.type||0)*30,"sawtooth",0.15,0.06,100);
+  if(Math.random()<0.15)spawnPowerUp(e.x,e.y);
+}
+// ---- END MODIFIED killEnemy ----
+
+var activeEffects={};
+function addEffect(id,duration){activeEffects[id]={timer:duration};updateEffectDisplay();}
+function updateEffects(){
+  for(var k in activeEffects){if(activeEffects.hasOwnProperty(k)){activeEffects[k].timer--;if(activeEffects[k].timer<=0)delete activeEffects[k];}}
+  updateEffectDisplay();
+}
+function updateEffectDisplay(){
+  if(missileLevel>0)html+='<div class="effect-tag" style="color:#f80">导弹 Lv.'+missileLevel+'</div>';
+  if(dodgeLevel>0)html+='<div class="effect-tag" style="color:#8f8">闪避 '+dodgeLevel*10+'%</div>';
+
+  var h="";var names={highDmg:"高伤",freeze:"冰冻",scoreX2:"双倍分",pierce:"穿透",slowTime:"减速"};
+  for(var k in activeEffects){if(activeEffects.hasOwnProperty(k)){var v=activeEffects[k],n=names[k]||k;h+='<div class="effect-tag">'+n+' '+Math.ceil(v.timer/60)+'s</div>';}}
+  activeEffectsEl.innerHTML=h;
+}
+
+function drawShip(x,y,w,h,color,angle,shape){
+  ctx.save();ctx.translate(x,y);if(angle)ctx.rotate(angle);
+  var s=Math.min(w,h);ctx.shadowColor=color;ctx.shadowBlur=shape?8:15;
+  if(shape){
+    ctx.beginPath();var r=s*0.5;
+    if(shape==="diamond"){ctx.moveTo(0,-r);ctx.lineTo(-r*0.7,0);ctx.lineTo(0,r);ctx.lineTo(r*0.7,0);}
+    else if(shape==="hexagon"){for(var i=0;i<6;i++){var a=Math.PI/3*i-Math.PI/6;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r);}}
+    else if(shape==="star"){for(var j=0;j<10;j++){var a2=Math.PI/5*j-Math.PI/2,rd=j%2===0?r:r*0.5;ctx.lineTo(Math.cos(a2)*rd,Math.sin(a2)*rd);}}
+    else{ctx.arc(0,0,r*0.8,0,Math.PI*2);}
+    ctx.closePath();
+    ctx.fillStyle=color;ctx.fill();ctx.strokeStyle="#fff";ctx.lineWidth=1.5;ctx.stroke();
+    ctx.beginPath();ctx.arc(0,0,r*0.25,0,Math.PI*2);ctx.fillStyle="#fff";ctx.globalAlpha=0.6;ctx.fill();ctx.globalAlpha=1;
+  }else{
+    var grd=ctx.createLinearGradient(0,-s*0.35,0,s*0.6);
+    grd.addColorStop(0,"rgba(0,255,255,0)");grd.addColorStop(0.5,color);grd.addColorStop(1,"#fff");
+    ctx.beginPath();ctx.moveTo(0,-s*0.55);ctx.lineTo(-s*0.35,s*0.35);ctx.lineTo(-s*0.12,s*0.18);
+    ctx.lineTo(0,s*0.5);ctx.lineTo(s*0.12,s*0.18);ctx.lineTo(s*0.35,s*0.35);ctx.closePath();
+    ctx.fillStyle=grd;ctx.fill();ctx.strokeStyle="#0ff";ctx.lineWidth=2;ctx.stroke();
+    ctx.beginPath();ctx.ellipse(0,-s*0.08,s*0.1,s*0.14,0,0,Math.PI*2);
+    ctx.fillStyle="#fff";ctx.globalAlpha=0.8;ctx.fill();ctx.globalAlpha=1;
+  }
+  ctx.shadowBlur=0;ctx.restore();
+}
+function hueShift(hex,amount){
+  if(!amount||amount===0)return hex;if(hex.length===4)hex="#"+hex[1]+hex[1]+hex[2]+hex[2]+hex[3]+hex[3];
+  var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  r=Math.min(255,Math.max(0,r+amount));g=Math.min(255,Math.max(0,g+amount*0.3));
+  return"#"+((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1);
+}
+function initStars(){stars=[];for(var i=0;i<200;i++)stars.push({x:Math.random()*W,y:Math.random()*H,size:Math.random()*2+0.5,speed:Math.random()*2+0.3,alpha:Math.random()*0.7+0.3});}
+
+function update(){
+  if(!player)return;
+  
+  // ---- MECHANISM 3 & 4: track player movement and rest timer ----
+  playerMoving=(Math.abs(player.x-lastPlayerX)>0.5||Math.abs(player.y-lastPlayerY)>0.5);
+  lastPlayerX=player.x;lastPlayerY=player.y;
+  
+  if(restActive){
+    restTimer-=1/60;
+    if(restTimer<=0){restActive=false;restTimer=0;restTimerEl.style.display="none";
+      if(gameState==="paused"){gameState="playing";overlay.style.display="none";}
+    }else{
+      restTimerEl.style.display="block";
+      restTimerEl.textContent="休整: "+Math.ceil(restTimer)+"s";
+      if(gameState==="paused"&&!restActive){gameState="playing";overlay.style.display="none";}
+      return; // freeze game during rest
+    }
+  }
+  if(gameState==="paused")return;
+  
+  var dx=0,dy=0;
+  if(keys.KeyW||keys.ArrowUp)dy=-player.speed;
+  else if(keys.KeyS||keys.ArrowDown)dy=player.speed;
+  if(keys.KeyA||keys.ArrowLeft)dx=-player.speed;
+  if(keys.KeyD||keys.ArrowRight)dx=player.speed;
+  if(dx===0&&dy===0&&mouseX>0&&mouseY>0){
+    var mdx=mouseX-player.x,mdy=mouseY-player.y,dist=Math.sqrt(mdx*mdx+mdy*mdy);
+    if(dist>2){var spd=Math.min(player.speed,dist*0.15);dx=mdx/dist*spd;dy=mdy/dist*spd;}
+  }
+  player.x+=dx;player.y+=dy;
+  player.x=Math.max(20,Math.min(W-20,player.x));player.y=Math.max(20,Math.min(H-20,player.y));
+
+  // ---- MECHANISM 3: track idle time ----
+  if(!playerMoving){playerIdleTime++;}else{playerIdleTime=0;}
+
+  // ---- MECHANISM 2: hunt mode trigger ----
+  huntMode=(lives<2);
+  huntIndicator.style.display=huntMode?"block":"none";
+
+  // ---- MECHANISM 3: enemy marking system ----
+  // Check if enemies pass close to idle player
+  if(playerIdleTime>60){
+    for(var i=0;i<enemies.length;i++){
+      var e=enemies[i];if(e.dead||e._marked)continue;
+      if(Math.abs(e.x-player.x)<80&&Math.abs(e.y-player.y)<80&&e.y>0&&e.y<H){
+        e._marked=true;markCount++;
+        createExplosion(e.x,e.y,"#88f",5);
+        playSound(400,"triangle",0.08,0.05);
+        if(markCount>=3&&playerIdleTime>180){
+          // MAX THREAT: dramatically increase spawn rate
+          crisisSpawnBoost=Math.max(crisisSpawnBoost,3);
+        }
+      }
+    }
+  }
+  // Decay marks if player moves
+  if(playerMoving&&markCount>0){markCount=Math.max(0,markCount-0.02);}
+  if(markCount>=3)playerIdleTime=Math.max(playerIdleTime,180);
+
+  // ---- MECHANISM 1: wave progress ----
+  waveProgress+=0.08; // base passive progress per frame (~100% in 20s at 60fps)
+  waveBarFill.style.width=Math.min(100,waveProgress)+"%";
+
+  fireTimer--;
+  if((keys.Space||keys.Click)&&fireTimer<=0){
+    var cd=player.powerLevel>=7?4:player.powerLevel>=5?5:player.powerLevel>=3?6:player.powerLevel>=2?10:15;fireTimer=cd;
+    var bx=player.x,by=player.y-player.h/2;var pdmg=activeEffects.highDmg?(activeEffects.highDmg.dmgMul||2):1;
+    if(player.powerLevel>=9){
+      for(var fi=-4;fi<=4;fi++){var fcol=fi%2===0?"#f0f":"#ff0";var fdm=fi%2===0?pdmg*3:pdmg*2;
+        bullets.push({x:bx+fi*7,y:by+(fi%2===0?-8:-3),vx:fi*0.25,vy:fi%2===0?-11:-10.5,w:3,h:10,color:fcol,dmg:fdm,pierce:!!activeEffects.pierce});}
+      bullets.push({x:bx,y:by-10,vx:0,vy:-12,w:5,h:14,color:"#fff",dmg:pdmg*4,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=8){
+      for(var fi=-3;fi<=3;fi++){var fcol=fi%2===0?"#f0f":"#ff0";var fdm=fi%2===0?pdmg*3:pdmg*2;
+        bullets.push({x:bx+fi*8,y:by+(fi%2===0?-8:-3),vx:fi*0.2,vy:fi%2===0?-11:-10.5,w:3,h:10,color:fcol,dmg:fdm,pierce:!!activeEffects.pierce});}
+      bullets.push({x:bx,y:by-10,vx:0,vy:-12,w:4,h:13,color:"#fff",dmg:pdmg*4,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=7){
+      for(var fi=-2;fi<=2;fi++){var fcol=fi===0?"#f0f":"#ff0";var fdm=fi===0?pdmg*3:pdmg*2;
+        bullets.push({x:bx+fi*12,y:by-5,vx:fi*0.3,vy:-10.5,w:3,h:10,color:fcol,dmg:fdm,pierce:!!activeEffects.pierce});}
+      bullets.push({x:bx-7,y:by-3,vx:-0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+7,y:by-3,vx:0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=6){
+      bullets.push({x:bx-12,y:by,vx:-0.4,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+12,y:by,vx:0.4,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx-5,y:by-3,vx:-0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+5,y:by-3,vx:0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx-10,y:by-6,vx:-0.1,vy:-11,w:3,h:11,color:"#f0f",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+10,y:by-6,vx:0.1,vy:-11,w:3,h:11,color:"#f0f",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=5){
+      bullets.push({x:bx-15,y:by,vx:-0.5,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+15,y:by,vx:0.5,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx-6,y:by-3,vx:-0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+6,y:by-3,vx:0.2,vy:-10.5,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx,y:by-8,vx:0,vy:-11,w:4,h:12,color:"#f0f",dmg:pdmg*3,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=4){
+      bullets.push({x:bx-10,y:by,vx:-0.3,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+10,y:by,vx:0.3,vy:-10,w:3,h:10,color:"#ff0",dmg:pdmg*2,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx,y:by-5,vx:0,vy:-11,w:4,h:12,color:"#0ff",dmg:pdmg*3,pierce:!!activeEffects.pierce});
+    }else if(player.powerLevel>=2){
+      bullets.push({x:bx-8,y:by+3,vx:0,vy:-10,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+      bullets.push({x:bx+8,y:by+3,vx:0,vy:-10,w:3,h:10,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+    }else{
+      bullets.push({x:bx,y:by,vx:0,vy:-10,w:4,h:12,color:"#0ff",dmg:pdmg,pierce:!!activeEffects.pierce});
+    }
+    playSound(800,"square",0.1,0.04,-400);
+  }
+
+  for(var i=0;i<bullets.length;i++){bullets[i].x+=bullets[i].vx;bullets[i].y+=bullets[i].vy;}
+  bullets=bullets.filter(function(b){return b.y>-20&&b.y<H+20&&b.x>-20&&b.x<W+20;});
+
+  var slowMul=activeEffects.slowTime?0.5:1;
+  for(var i=0;i<enemyBullets.length;i++){enemyBullets[i].x+=enemyBullets[i].vx*slowMul;enemyBullets[i].y+=enemyBullets[i].vy*slowMul;}
+  enemyBullets=enemyBullets.filter(function(b){return b.y<H+20&&b.y>-20&&b.x>-20&&b.x<W+20;});
+
+  var freezeMul=activeEffects.freeze?0.2:1;
+  for(var i=0;i<enemies.length;i++){
+    var e=enemies[i];if(e.dead)continue;
+    if(e.behave)e.behave(e);
+    e.y+=e.speed*freezeMul;e.x+=Math.sin(e.angle)*0.6*freezeMul;e.angle+=e.wiggle*freezeMul;
+    if(e.type>=2)e.x+=Math.sin(e.angle*1.7)*0.3*freezeMul;
+    e.fireTimer++;
+    if(e.fireTimer>60/e.fireRate&&e.y>0&&e.y<H&&player){
+      e.fireTimer=0;var bang=Math.atan2(player.y-e.y,player.x-e.x);
+      enemyBullets.push({x:e.x,y:e.y+e.h/2,vx:Math.cos(bang)*4.5,vy:Math.sin(bang)*4.5,w:4,h:4,color:e.color});
+    }
+  }
+
+  // ---- MECHANISM 3 & 5: modified enemy spawn with crisis and marking ----
+  enemySpawnTimer--;
+  if(enemySpawnTimer<=0&&!boss){
+    var baseDelay=Math.max(15,80-level*5);
+    // MECHANISM 3: marking reduces spawn delay
+    if(markCount>=3)baseDelay=Math.max(8,baseDelay*0.5);
+    // MECHANISM 5: crisis wave dramatically increases spawns
+    if(crisisWave)baseDelay=Math.max(6,baseDelay*0.35);
+    if(crisisSpawnBoost>0)baseDelay=Math.max(5,baseDelay*(1-crisisSpawnBoost*0.2));
+    
+    enemySpawnTimer=baseDelay+Math.random()*20;
+    enemies.push(spawnEnemy());
+    
+    // MECHANISM 5: crisis wave mass spawn
+    var extraCount=0;
+    if(crisisWave)extraCount=4+Math.floor(Math.random()*4); // 4-7 extra in crisis
+    else if(markCount>=2)extraCount=markCount-1;
+    else{if(level>=6&&Math.random()<0.3)extraCount=2;else if(level>=3&&Math.random()<0.4)extraCount=1;}
+    for(var k=0;k<extraCount;k++)enemies.push(spawnEnemy());
+  }
+
+  // ---- MECHANISM 5: detect pre-boss wave ----
+  var preBossWave=(level+1)%50===0&&level>=49;
+  if(preBossWave&&!crisisWave&&!boss){
+    crisisWave=true;
+    crisisSpawnBoost=5;
+    crisisWarning.style.display="block";
+    playSound(150,"sawtooth",0.4,0.3,-50);
+    setTimeout(function(){if(!boss&&crisisWave){crisisWarning.style.display="block";playSound(150,"sawtooth",0.4,0.3,-50);}},2000);
+  }
+  // Clear crisis flag when wave advances
+  if(level%50===0&&crisisWave){crisisWave=false;crisisSpawnBoost=0;crisisWarning.style.display="none";}
+
+  // Boss spawn
+  var bossWave=50*Math.floor((level-1)/50)+50;
+  if(level>=50&&level===bossWave&&!boss&&defeatedBossCount<Math.floor(level/50)){
+    spawnBoss();
+  }
+
+  if(boss&&!boss.dead){
+    boss.behave(boss);boss.fireTimer++;
+    boss.x=Math.max(boss.w/2,Math.min(W-boss.w/2,boss.x));boss.y=Math.max(boss.h/2,Math.min(H*0.35,boss.y));
+    bossHpFill.style.width=Math.max(0,(boss.hp/boss.maxHp)*100)+"%";
+    if(boss.hp<=0){
+      boss.dead=true;defeatedBossCount++;
+      breakthroughCoins++; // Drop breakthrough coin
+      createExplosion(boss.x,boss.y,boss.color,80);
+      var btFX_x=boss.x,btFX_y=boss.y; // For breakthrough coin pickup visual
+      score+=boss.score*(activeEffects.scoreX2?(activeEffects.scoreX2.multiplier||2):1);
+      energyCoins+=Math.floor(boss.score*0.5);
+      playSound(50,"sawtooth",0.8,0.2,-20);
+      createExplosion(btFX_x,btFX_y,"#f80",25); // Orange burst for coin
+      setTimeout(function(){playSound(30,"square",0.6,0.15);},300);
+      bossHpBar.style.display="none";bossNameEl.style.display="none";
+      for(var i=0;i<5;i++)spawnPowerUp(boss.x+(Math.random()-0.5)*boss.w,boss.y+(Math.random()-0.5)*boss.h);
+      boss=null;
+    }
+  }
+
+  for(var i=0;i<bullets.length;i++){
+    var b=bullets[i];if(b.hit)continue;
+    if(boss&&!boss.dead&&Math.abs(b.x-boss.x)<boss.w*0.4+6&&Math.abs(b.y-boss.y)<boss.h*0.4+8){
+      boss.hp-=b.dmg;if(!b.pierce)b.hit=true;createExplosion(b.x,b.y,"#ff0",3);
+      if(boss.hp>0)createExplosion(b.x,b.y,"#fff",4);if(b.pierce)continue;
+    }
+    for(var j=0;j<enemies.length;j++){
+      var e=enemies[j];if(e.dead)continue;
+      if(Math.abs(b.x-e.x)<e.w*0.4+4&&Math.abs(b.y-e.y)<e.h*0.4+8){
+        e.hp-=b.dmg;if(!b.pierce)b.hit=true;createExplosion(b.x,b.y,"#ff0",3);
+        if(e.hp<=0){killEnemy(e);}else{createExplosion(b.x,b.y,"#fff",5);playSound(600,"square",0.05,0.03);}
+        if(!b.pierce)break;
+      }
+    }
+  }
+  bullets=bullets.filter(function(b){return!b.hit;});
+
+  if(invincibleTimer<=0){
+    for(var i=0;i<enemyBullets.length;i++){
+      var eb=enemyBullets[i];if(eb.hit)continue;
+      if(Math.abs(eb.x-player.x)<player.w*0.3+4&&Math.abs(eb.y-player.y)<player.h*0.35+6){
+        eb.hit=true;
+        if(player.shieldActive){createExplosion(eb.x,eb.y,"#0ff",5);playSound(1000,"triangle",0.05,0.03);player.shieldActive=false;invincibleTimer=30;}
+        else if(dodgeLevel>0&&Math.random()<dodgeLevel*0.1){createExplosion(eb.x,eb.y,"#8f8",15);playSound(600,"sine",0.15,0.05,400);invincibleTimer=30;}else{createExplosion(eb.x,eb.y,"#f44",8);lives--;playSound(80,"sawtooth",0.3,0.1,-50);invincibleTimer=60;shakeTimer=20;shakeIntensity=8;if(lives<=0){gameOver();return;}}
+        break;
+      }
+    }
+    enemyBullets=enemyBullets.filter(function(b){return!b.hit;});
+    var hitList=[];
+    if(boss&&!boss.dead)hitList.push(boss);
+    for(var i=0;i<enemies.length;i++){if(!enemies[i].dead)hitList.push(enemies[i]);}
+    for(var i=0;i<hitList.length;i++){
+      var he=hitList[i];if(he.dead)continue;
+      if(Math.abs(he.x-player.x)<player.w*0.35+he.w*0.35&&Math.abs(he.y-player.y)<player.h*0.35+he.h*0.35){
+        if(he===boss){boss.hp-=5;createExplosion(player.x,player.y,"#ff0",10);}
+        else{killEnemy(he);}
+        if(player.shieldActive){player.shieldActive=false;invincibleTimer=30;playSound(1000,"triangle",0.05,0.03);}
+        else{lives--;playSound(80,"sawtooth",0.3,0.1,-50);invincibleTimer=60;shakeTimer=20;shakeIntensity=8;if(lives<=0){gameOver();return;}}
+      }
+    }
+  }
+  if(invincibleTimer>0)invincibleTimer--;
+
+  enemies=enemies.filter(function(e){return!e.dead&&e.y<H+80;});
+
+  for(var i=0;i<powerUps.length;i++){powerUps[i].y+=powerUps[i].vy;powerUps[i].glow+=0.05;powerUps[i].life--;}
+  for(var i=0;i<powerUps.length;i++){
+    var p=powerUps[i];if(p.collected)continue;
+    if(Math.abs(p.x-player.x)<22&&Math.abs(p.y-player.y)<28){
+      p.collected=true;playSound(1200,"sine",0.2,0.08,200);
+      switch(p.type){
+        case"heal":{var bt=getShopBreakthrough("heal");lives=Math.min(bt?7:6,lives+1);break;}
+        case"power":player.powerLevel=Math.min(10,player.powerLevel+1);break;
+        case"shield":{var bt=getShopBreakthrough("shield");player.shieldActive=true;player.shieldTimer=bt?900:600;break;}
+        case"highDmg":{var bt=getShopBreakthrough("highDmg");addEffect("highDmg",bt?1200:900);if(bt)activeEffects.highDmg.dmgMul=3;break;}
+        case"coinBonus":{var bt=getShopBreakthrough("coinBonus");energyCoins+=bt?500:200;createExplosion(player.x,player.y,"#ff0",bt?20:10);break;}
+        case"freeze":{var bt=getShopBreakthrough("freeze");addEffect("freeze",bt?720:480);break;}
+        case"nuke":{
+          if(crisisWave){break;} // Blocked during crisis waves
+          var bt=getShopBreakthrough("nuke");
+          for(var k=0;k<enemies.length;k++){if(!enemies[k].dead)killEnemy(enemies[k]);}enemies=[];
+          if(boss&&!boss.dead){boss.hp-=boss.maxHp*(bt?0.4:0.2);createExplosion(boss.x,boss.y,boss.color,30);}
+          createExplosion(W/2,H/2,"#fff",bt?70:50);playSound(200,"sawtooth",0.5,0.2,-100);
+          nukeUseCount++;if(nukeUseCount>=3){nukeDisabledWaves=3;nukeUseCount=0;}
+          break;}
+        case"pierce":{var bt=getShopBreakthrough("pierce");addEffect("pierce",bt?99999:900);break;}
+        case"scoreX2":{var bt=getShopBreakthrough("scoreX2");addEffect("scoreX2",bt?1800:1200);if(bt)activeEffects.scoreX2.multiplier=4;break;}
+        case"slowTime":{var bt=getShopBreakthrough("slowTime");addEffect("slowTime",bt?600:360);break;}
+        case"missile":{missileLevel=Math.min(10,missileLevel+1);playerMissiles=[];createExplosion(player.x,player.y,"#f80",15);playSound(800,"sine",0.2,0.15,200);break;}
+        case"laser":{var bt=getShopBreakthrough("laser");addEffect("laser",bt?1800:900);if(bt)activeEffects.laser={timer:bt?1800:900,breakthrough:true};break;}
+      }
+    }
+  }
+  powerUps=powerUps.filter(function(p){return!p.collected&&p.life>0&&p.y<H+30;});
+  if(player.shieldActive&&player.shieldTimer>0){player.shieldTimer--;if(player.shieldTimer<=0)player.shieldActive=false;}
+
+  // ---- MISSILE SUPPORT (permanent, level-based) ----
+  if(missileLevel>0&&player){
+    missileTimer++;
+    var levels=[600,480,360,270,200,150,110,80,60,60]; // frames between shots (10s -> 1s)
+    var missileRate=levels[Math.min(missileLevel-1,9)];
+    if(missileTimer>=missileRate){
+      missileTimer=0;
+      for(var ms=-1;ms<=1;ms+=2){
+        var mx=player.x+ms*25,my=player.y-10;
+        var bestEn=null,bestDist=99999;
+        for(var ei=0;ei<enemies.length;ei++){if(!enemies[ei].dead){var ed=Math.hypot(enemies[ei].x-mx,enemies[ei].y-my);if(ed<bestDist){bestDist=ed;bestEn=enemies[ei];}}}
+        if(!bestEn&&boss&&!boss.dead){var bd=Math.hypot(boss.x-mx,boss.y-my);if(bd<bestDist){bestDist=bd;bestEn=boss;}}
+        if(bestEn){
+          var angle=Math.atan2((bestEn.y||boss.y)-my,(bestEn.x||boss.x)-mx);
+          // 120 forward cone: only fire if target is within 60 of upward (-PI/2)
+          var upAngle=-Math.PI/2;
+          var diff=angle-upAngle;
+          while(diff>Math.PI)diff-=Math.PI*2;
+          while(diff<-Math.PI)diff+=Math.PI*2;
+          if(Math.abs(diff)<Math.PI/3){ // within 60 degrees = 120 cone
+            playerMissiles.push({x:mx,y:my,vx:Math.cos(angle)*5,vy:Math.sin(angle)*5,life:120});
+          }
+        }
+      }
+    }
+  }
+  for(var mi=0;mi<playerMissiles.length;mi++){
+    var pm=playerMissiles[mi];pm.x+=pm.vx;pm.y+=pm.vy;pm.life--;
+    // Check collision with enemies
+    for(var ei=0;ei<enemies.length;ei++){var en=enemies[ei];if(!en.dead&&Math.abs(pm.x-en.x)<en.w/2+6&&Math.abs(pm.y-en.y)<en.h/2+6){en.hp--;pm.life=0;createExplosion(pm.x,pm.y,"#f80",5);break;}}
+    if(pm.life>0&&boss&&!boss.dead&&Math.abs(pm.x-boss.x)<boss.w/2+6&&Math.abs(pm.y-boss.y)<boss.h/2+6){boss.hp-=2;pm.life=0;createExplosion(pm.x,pm.y,"#ff0",10);}
+  }
+  playerMissiles=playerMissiles.filter(function(m){return m.life>0&&m.x>0&&m.x<W&&m.y>0&&m.y<H;});
+
+  // ---- LASER CANNON ----
+  if(activeEffects.laser&&player){
+    laserTimer++;
+    var laserRate=(activeEffects.laser&&activeEffects.laser.breakthrough)?360:600; // 6s or 10s
+    if(laserTimer>=laserRate){
+      laserTimer=0;
+      activeLaser={x:player.x,y:player.y,life:60}; // 1 second
+    }
+  }else{laserTimer=0;}
+  if(activeLaser){
+    activeLaser.y=player?player.y:activeLaser.y;
+    activeLaser.x=player?player.x:activeLaser.x;
+    activeLaser.life--;if(activeLaser.life<=0)activeLaser=null;
+    if(activeLaser){
+      // Laser hits enemies
+      for(var ei=0;ei<enemies.length;ei++){var en=enemies[ei];if(!en.dead&&Math.abs(en.x-activeLaser.x)<en.w/2+8&&en.y<activeLaser.y){en.hp-=0.5;}}
+      if(boss&&!boss.dead&&Math.abs(boss.x-activeLaser.x)<boss.w/2+8&&boss.y<activeLaser.y){boss.hp-=1;}
+    }
+  }
+
+  for(var i=0;i<particles.length;i++){particles[i].x+=particles[i].vx;particles[i].y+=particles[i].vy;particles[i].life--;}
+  particles=particles.filter(function(p){return p.life>0;});
+  if(shakeTimer>0)shakeTimer--;
+  updateEffects();
+
+  // ---- MECHANISM 1: wave progression based on kills ----
+  if(waveProgress>=100){
+    waveProgress=0;waveKills=0;
+    level++;lastWave=level;if(nukeDisabledWaves>0)nukeDisabledWaves--;
+    // Reset marks on wave advance
+    markCount=Math.max(0,markCount-1);
+    // Clear _marked flags
+    for(var i=0;i<enemies.length;i++)enemies[i]._marked=false;
+    playSound(600,"sine",0.3,0.08,300);
+    setTimeout(function(){playSound(900,"sine",0.3,0.08,300);},150);
+    createExplosion(W/2,H/2,"#ff0",40);
+    // MECHANISM 4: rest period every 10 waves
+    if(level%10===0){
+      restActive=true;restTimer=10;
+      restTimerEl.style.display="block";
+      restTimerEl.textContent="休整: 10s";
+    }
+  }
+
+  for(var i=0;i<stars.length;i++){stars[i].y+=stars[i].speed;if(stars[i].y>H+5){stars[i].y=-5;stars[i].x=Math.random()*W;}}
+  uiScore.textContent="得分: "+score+" | 💎"+breakthroughCoins;
+  uiCoins.textContent="能量币: "+energyCoins+" | 💎"+breakthroughCoins;
+  uiBtcoins.textContent="突破币: "+breakthroughCoins;
+  uiLives.textContent="生命: "+"\u2665".repeat(Math.max(0,lives))+"\u2661".repeat(Math.max(0,5-lives));
+  uiLevel.textContent="波次: "+level+(crisisWave?" ⚡危机":"");
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  var sx=0,sy=0;
+  if(shakeTimer>0){sx=(Math.random()-0.5)*shakeIntensity*(shakeTimer/20);sy=(Math.random()-0.5)*shakeIntensity*(shakeTimer/20);}
+  ctx.save();ctx.translate(sx,sy);
+
+  for(var i=0;i<stars.length;i++){var s=stars[i];ctx.globalAlpha=s.alpha;ctx.fillStyle="#fff";ctx.fillRect(s.x,s.y,s.size,s.size);}
+  ctx.globalAlpha=1;
+
+  // ---- Draw missiles ----
+  for(var mi=0;mi<playerMissiles.length;mi++){
+    var pm=playerMissiles[mi];ctx.save();ctx.translate(pm.x,pm.y);
+    ctx.fillStyle="#f80";ctx.shadowColor="#f80";ctx.shadowBlur=6;
+    ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(4,4);ctx.lineTo(-4,4);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#ff0";ctx.beginPath();ctx.arc(0,0,3,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+  // ---- Draw laser ----
+  if(activeLaser){
+    ctx.strokeStyle="#f0f";ctx.shadowColor="#f0f";ctx.shadowBlur=20;ctx.lineWidth=8;
+    ctx.globalAlpha=0.7+Math.random()*0.3;
+    ctx.beginPath();ctx.moveTo(activeLaser.x,activeLaser.y-20);ctx.lineTo(activeLaser.x,0);ctx.stroke();
+    ctx.lineWidth=3;ctx.shadowBlur=30;ctx.strokeStyle="#fff";
+    ctx.beginPath();ctx.moveTo(activeLaser.x,activeLaser.y-20);ctx.lineTo(activeLaser.x,0);ctx.stroke();
+    ctx.globalAlpha=1;ctx.shadowBlur=0;
+  }
+
+  if(player){
+    for(var i=0;i<enemyBullets.length;i++){var b=enemyBullets[i];ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=6;ctx.beginPath();ctx.arc(b.x,b.y,3,0,Math.PI*2);ctx.fill();}
+    ctx.shadowBlur=0;
+    for(var i=0;i<bullets.length;i++){var b=bullets[i];ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=8;ctx.fillRect(b.x-b.w/2,b.y-b.h/2,b.w,b.h);}
+    ctx.shadowBlur=0;
+
+    for(var i=0;i<enemies.length;i++){
+      var e=enemies[i];if(e.dead)continue;
+      var hpR=e.hp/e.maxHp,c=hueShift(e.color,Math.max(0,1-hpR)*40);
+      drawShip(e.x,e.y,e.w,e.h,c,Math.PI,e.shape);
+      if(e.hp<e.maxHp){var bw=e.w*1.2,bh=4,by=e.y-e.h/2-10;ctx.fillStyle="#333";ctx.fillRect(e.x-bw/2,by,bw,bh);ctx.fillStyle=hpR>0.5?"#0f0":hpR>0.25?"#ff0":"#f00";ctx.fillRect(e.x-bw/2,by,bw*hpR,bh);}
+      // MECHANISM 3: show mark indicator on enemies near idle player
+      if(markCount>=2&&Math.abs(e.x-player.x)<120&&Math.abs(e.y-player.y)<120){
+        ctx.fillStyle="rgba(100,100,255,0.3)";ctx.beginPath();ctx.arc(e.x,e.y,e.w*1.3,0,Math.PI*2);ctx.fill();
+      }
+    }
+
+    if(boss&&!boss.dead){
+      var bhpR=boss.hp/boss.maxHp,bc=hueShift(boss.color,Math.max(0,1-bhpR)*40);
+      ctx.save();ctx.shadowColor=bc;ctx.shadowBlur=25;drawShip(boss.x,boss.y,boss.w,boss.h,bc,0,boss.shape);ctx.shadowBlur=0;ctx.restore();
+      ctx.fillStyle="#fff";ctx.font="bold 15px Microsoft YaHei,PingFang SC,sans-serif";ctx.textAlign="center";
+      ctx.shadowColor="#f00";ctx.shadowBlur=8;ctx.fillText(boss.name,boss.x,boss.y-boss.h/2-22);ctx.shadowBlur=0;
+    }
+
+    for(var i=0;i<particles.length;i++){var p=particles[i];var a=p.life/p.maxLife;ctx.globalAlpha=a;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=4;ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);}
+    ctx.globalAlpha=1;ctx.shadowBlur=0;
+
+    for(var i=0;i<powerUps.length;i++){
+      var pu=powerUps[i];ctx.save();ctx.translate(pu.x,pu.y);var pucol="#fff";
+      for(var k=0;k<skillDefs.length;k++){if(skillDefs[k].id===pu.type){pucol=skillDefs[k].color;break;}}
+      ctx.shadowColor=pucol;ctx.shadowBlur=10+Math.sin(pu.glow)*5;ctx.fillStyle=pucol;var r=pu.w/2;ctx.beginPath();
+      for(var j=0;j<6;j++){var a2=Math.PI/3*j;ctx.lineTo(Math.cos(a2)*r,Math.sin(a2)*r);}ctx.closePath();
+      ctx.fill();ctx.strokeStyle="#fff";ctx.lineWidth=1.5;ctx.stroke();
+      ctx.fillStyle="#fff";ctx.font="bold 10px monospace";ctx.textAlign="center";ctx.textBaseline="middle";
+      var icons={heal:"\u2665",power:"P",shield:"S",highDmg:"D",coinBonus:"$",freeze:"F",nuke:"N",pierce:"R",scoreX2:"X",slowTime:"T"};
+      ctx.fillText(icons[pu.type]||"?",0,1);ctx.restore();
+    }
+    ctx.shadowBlur=0;
+
+    if(invincibleTimer<=0||Math.floor(invincibleTimer/4)%2===0){
+      drawShip(player.x,player.y,player.w,player.h,"#0ff",0,null);
+      if(player.shieldActive){ctx.beginPath();ctx.arc(player.x,player.y,player.w*0.55,0,Math.PI*2);ctx.strokeStyle="#0ff";ctx.lineWidth=2;ctx.globalAlpha=0.5+Math.sin(Date.now()*0.01)*0.3;ctx.stroke();ctx.globalAlpha=1;}
+    }
+    // MECHANISM 3: idle warning indicator
+    if(playerIdleTime>120&&playerIdleTime%30<15){
+      ctx.fillStyle="rgba(255,0,0,0.5)";ctx.font="bold 14px sans-serif";ctx.textAlign="center";
+      ctx.fillText("⚠ 注意移动 ⚠",player.x,player.y-player.h/2-20);
+    }
+    ctx.fillStyle="#0ff";ctx.shadowColor="#0ff";ctx.shadowBlur=4;
+    for(var i=0;i<2;i++){var px=player.x+(i-0.5)*10,py=player.y+player.h*0.45;ctx.globalAlpha=0.3+Math.random()*0.4;ctx.fillRect(px-1.5,py,3,4+Math.random()*6);}
+    ctx.globalAlpha=1;ctx.shadowBlur=0;
+  }
+  ctx.restore();
+}
+
+function startGame(){
+  initAudio();initShopItems();
+  score=0;lives=3;level=1;energyCoins=0;defeatedBossCount=0;
+  player=createPlayer();enemies=[];bullets=[];enemyBullets=[];particles=[];powerUps=[];boss=null;
+  fireTimer=0;enemySpawnTimer=30;invincibleTimer=0;shakeTimer=0;
+  player.powerLevel=1;player.shieldActive=false;player.shieldTimer=0;
+  activeEffects={};updateEffectDisplay();
+  bossHpBar.style.display="none";bossNameEl.style.display="none";
+  // ---- Reset new mechanics ----
+  waveProgress=0;waveKills=0;playerIdleTime=0;lastPlayerX=player.x;lastPlayerY=player.y;
+  markCount=0;huntMode=false;restTimer=0;restActive=false;
+  breakthroughCoins=0;playerMissiles=[];missileTimer=0;laserTimer=0;activeLaser=null;
+  missileLevel=0;nukeUseCount=0;nukeDisabledWaves=0;dodgeLevel=0;
+  crisisWave=false;crisisSpawnBoost=0;lastWave=1;playerMoving=false;
+  waveBarFill.style.width="0%";restTimerEl.style.display="none";
+  huntIndicator.style.display="none";crisisWarning.style.display="none";
+  // ----
+  initStars();overlay.style.display="none";shopEl.style.display="none";gameState="playing";
+}
+
+function gameOver(){
+  gameState="gameover";player=null;
+  overlay.innerHTML='<h1>游戏结束</h1><p>最终得分: '+score+'</p><p>到达波次: '+level+'</p><p>能量币: '+energyCoins+'</p><p>突破币: '+breakthroughCoins+'</p><p>击败Boss: '+defeatedBossCount+'</p><p class="start">点击或按空格重新开始</p>';
+  overlay.style.display="flex";
+  bossHpBar.style.display="none";bossNameEl.style.display="none";
+  waveBarFill.style.width="0%";restTimerEl.style.display="none";huntIndicator.style.display="none";crisisWarning.style.display="none";
+  playSound(40,"sawtooth",0.6,0.12,-30);
+  setTimeout(function(){playSound(30,"square",0.5,0.1,-20);},200);
+}
+
+function toggleShop(){
+  if(!restActive||gameState!=="paused")return;
+  if(shopEl.style.display==="flex"){shopEl.style.display="none";gameState="paused";}
+  else{gameState="paused_shop";shopEl.style.display="flex";renderShopUI();}
+}
+
+function gameLoop(){
+  if(gameState==="playing"||(gameState==="paused"&&restActive))update();
+  render();requestAnimationFrame(gameLoop);
+}
+
+canvas.addEventListener("mousemove",function(e){mouseX=e.clientX;mouseY=e.clientY;});
+canvas.addEventListener("mousedown",function(e){e.preventDefault();
+  if(gameState==="menu"){
+    var el=e.target;
+    if(el&&el.id==="btn-newgame"){startGame();return;}
+    if(el&&el.id==="btn-continue"){if(loadGame())return;}
+    if(el&&el.id==="btn-leaderboard"){showLeaderboard();return;}
+    if(hasSave()){loadGame();return;}
+    startGame();return;}
+  if(gameState==="gameover"){
+    var el=e.target;
+    if(el&&el.id==="btn-lb"){showLeaderboard();return;}
+    startGame();return;}
+  if(gameState==="paused_shop"){toggleShop();return;}
+  keys.Click=true;initAudio();
+});
+canvas.addEventListener("mouseup",function(){keys.Click=false;});
+canvas.addEventListener("contextmenu",function(e){e.preventDefault();});
+window.addEventListener("keydown",function(e){
+  if(e.code==="Space"){e.preventDefault();
+    if(gameState==="menu"){if(hasSave()){loadGame();return;}startGame();return;}if(gameState==="gameover"){startGame();return;}
+    keys.Space=true;initAudio();
+  }
+  // ---- MECHANISM 4: P only works during rest period ----
+  if(e.code==="KeyP"){
+    if(restActive){
+      if(gameState==="paused_shop"){gameState="paused";shopEl.style.display="none";}
+      else if(gameState==="playing"){gameState="paused";overlay.innerHTML='<h1>休整中</h1><p>剩余时间: '+Math.ceil(restTimer)+'s</p><p class="start">按P继续游戏</p>';overlay.style.display="flex";}
+      else if(gameState==="paused"){gameState="playing";overlay.style.display="none";}
+    }else if(gameState==="playing"){
+      // Can't pause outside rest - show feedback
+      playSound(200,"square",0.05,0.03);
+    }
+  }
+  // ----
+  if(e.code==="KeyS"){e.preventDefault();if(restActive&&(gameState==="paused"||gameState==="paused_shop"))toggleShop();}
+  if(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code)>=0){keys[e.code]=true;}
+});
+window.addEventListener("keyup",function(e){
+  if(e.code==="Space")keys.Space=false;
+  if(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].indexOf(e.code)>=0){keys[e.code]=false;}
+});
+canvas.addEventListener("touchmove",function(e){e.preventDefault();mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;},{passive:false});
+canvas.addEventListener("touchstart",function(e){e.preventDefault();mouseX=e.touches[0].clientX;mouseY=e.touches[0].clientY;
+  if(gameState==="menu"){if(hasSave()){loadGame();return;}startGame();return;}
+  if(gameState==="gameover"){startGame();return;}
+  if(gameState==="paused_shop"){toggleShop();return;}
+  keys.Click=true;initAudio();
+},{passive:false});
+canvas.addEventListener("touchend",function(e){e.preventDefault();keys.Click=false;},{passive:false});
+document.getElementById("shop-close").addEventListener("click",function(e){e.stopPropagation();if(gameState==="paused_shop"){shopEl.style.display="none";gameState="paused";}});
+
+initStars();initShopItems();gameLoop();
+})();
+</script>
+</body>
+</html>

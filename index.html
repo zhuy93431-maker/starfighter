@@ -809,6 +809,88 @@ function update(){
   uiLevel.textContent="波次: "+level+(crisisWave?" ⚡危机":"");
 }
 
+// ===== SAVE / LOAD / LEADERBOARD =====
+var SAVE_KEY="sf_save",REC_KEY="sf_records";
+function hasSave(){try{return!!localStorage.getItem(SAVE_KEY);}catch(e){return false;}}
+function saveGame(){
+  if(!player||gameState!=="playing"&&gameState!=="paused")return;
+  var s={score:score,lives:lives,level:level,energyCoins:energyCoins,
+    defeatedBossCount:defeatedBossCount,breakthroughCoins:breakthroughCoins,
+    missileLevel:missileLevel,dodgeLevel:dodgeLevel,
+    nukeUseCount:nukeUseCount,nukeDisabledWaves:nukeDisabledWaves,
+    powerLevel:player.powerLevel,waveProgress:waveProgress,waveKills:waveKills,
+    totalEnemiesKilled:totalEnemiesKilled,sessionStartTime:sessionStartTime,
+    x:player.x,y:player.y};
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify(s));}catch(e){}
+}
+function deleteSave(){try{localStorage.removeItem(SAVE_KEY);}catch(e){}}
+function loadGame(){
+  var s;try{s=JSON.parse(localStorage.getItem(SAVE_KEY));}catch(e){return false;}
+  if(!s)return false;
+  initAudio();initShopItems();
+  score=s.score||0;lives=s.lives||3;level=s.level||1;energyCoins=s.energyCoins||0;
+  defeatedBossCount=s.defeatedBossCount||0;breakthroughCoins=s.breakthroughCoins||0;
+  missileLevel=s.missileLevel||0;dodgeLevel=s.dodgeLevel||0;
+  nukeUseCount=s.nukeUseCount||0;nukeDisabledWaves=s.nukeDisabledWaves||0;
+  waveProgress=s.waveProgress||0;waveKills=s.waveKills||0;
+  totalEnemiesKilled=s.totalEnemiesKilled||0;sessionStartTime=s.sessionStartTime||Date.now();
+  player=createPlayer();player.powerLevel=s.powerLevel||1;player.x=s.x||W/2;player.y=s.y||H-100;
+  enemies=[];bullets=[];enemyBullets=[];particles=[];powerUps=[];boss=null;
+  playerMissiles=[];missileTimer=0;laserTimer=0;activeLaser=null;
+  fireTimer=0;enemySpawnTimer=30;invincibleTimer=0;shakeTimer=0;
+  player.shieldActive=false;player.shieldTimer=0;activeEffects={};updateEffectDisplay();
+  playerIdleTime=0;lastPlayerX=player.x;lastPlayerY=player.y;
+  markCount=0;huntMode=false;restTimer=0;restActive=false;
+  crisisWave=false;crisisSpawnBoost=0;lastWave=level;playerMoving=false;
+  bossHpBar.style.display="none";bossNameEl.style.display="none";
+  waveBarFill.style.width=Math.min(100,waveProgress)+"%";
+  restTimerEl.style.display="none";huntIndicator.style.display="none";crisisWarning.style.display="none";
+  initStars();overlay.style.display="none";shopEl.style.display="none";gameState="playing";
+  return true;
+}
+// ===== LEADERBOARD =====
+function saveRecord(){
+  var recs=[];
+  try{recs=JSON.parse(localStorage.getItem(REC_KEY)||"[]");}catch(e){}
+  var t=sessionStartTime?Math.floor((Date.now()-sessionStartTime)/1000):0;
+  recs.push({date:new Date().toLocaleString(),score:score,wave:level,
+    kills:totalEnemiesKilled,bosses:defeatedBossCount,time:t});
+  recs.sort(function(a,b){return b.score-a.score;});
+  if(recs.length>50)recs.length=50;
+  try{localStorage.setItem(REC_KEY,JSON.stringify(recs));}catch(e){}
+  return recs;
+}
+function getLeaderboard(){
+  try{return JSON.parse(localStorage.getItem(REC_KEY)||"[]");}catch(e){return[];}
+}
+function showLeaderboard(){
+  var lb=getLeaderboard();
+  var h="<h1>排行榜</h1><div style='max-height:60vh;overflow-y:auto;width:90%;max-width:650px;font-size:13px'>";
+  if(lb.length===0)h+="<p>暂无记录</p>";
+  else{h+="<table style='width:100%;color:#fff;border-collapse:collapse'>";
+    h+="<tr style='color:#ff0'><th>#</th><th>日期</th><th>分数</th><th>波次</th><th>击杀</th><th>Boss</th><th>时长</th></tr>";
+    for(var i=0;i<Math.min(lb.length,10);i++){
+      var r=lb[i],c=i===0?"#ff0":i<3?"#f80":"#fff";
+      var m=Math.floor(r.time/60),s=r.time%60;
+      h+="<tr style='color:"+c+"'><td>"+(i+1)+"</td><td>"+(r.date||"").slice(2,16)+"</td><td>"+r.score+"</td><td>"+r.wave+"</td><td>"+r.kills+"</td><td>"+r.bosses+"</td><td>"+m+"m"+s+"s</td></tr>";
+    }h+="</table>";}
+  h+="</div><p class='start'>点击或按空格返回</p>";
+  overlay.innerHTML=h;overlay.style.display="flex";
+}
+// ===== MAIN MENU =====
+function showMainMenu(){
+  var h="<h1>✈ 星际战机 ✈</h1>";
+  if(hasSave()&&gameState==="menu"){
+    var sv=null;try{sv=JSON.parse(localStorage.getItem(SAVE_KEY));}catch(e){}
+    if(sv)h+="<p class='start' id='btn-continue'>继续游戏 (波次 "+sv.level+")</p>";
+  }
+  h+="<p class='start' id='btn-newgame'>新游戏</p>";
+  var lb=getLeaderboard();
+  if(lb.length>0)h+="<p class='start' id='btn-leaderboard'>排行榜 (最高 "+lb[0].score+"分)</p>";
+  h+="<p class='tips'>WASD移动 | 鼠标射击 | 空格确认</p>";
+  overlay.innerHTML=h;overlay.style.display="flex";
+}
+
 function render(){
   ctx.clearRect(0,0,W,H);
   var sx=0,sy=0;
@@ -892,8 +974,8 @@ function render(){
 }
 
 function startGame(){
-  initAudio();initShopItems();
-  score=0;lives=3;level=1;energyCoins=0;defeatedBossCount=0;
+  deleteSave();initAudio();initShopItems();
+  score=0;lives=3;level=1;energyCoins=0;defeatedBossCount=0;totalEnemiesKilled=0;sessionStartTime=Date.now();
   player=createPlayer();enemies=[];bullets=[];enemyBullets=[];particles=[];powerUps=[];boss=null;
   fireTimer=0;enemySpawnTimer=30;invincibleTimer=0;shakeTimer=0;
   player.powerLevel=1;player.shieldActive=false;player.shieldTimer=0;
@@ -912,8 +994,14 @@ function startGame(){
 }
 
 function gameOver(){
-  gameState="gameover";player=null;
-  overlay.innerHTML='<h1>游戏结束</h1><p>最终得分: '+score+'</p><p>到达波次: '+level+'</p><p>能量币: '+energyCoins+'</p><p>突破币: '+breakthroughCoins+'</p><p>击败Boss: '+defeatedBossCount+'</p><p class="start">点击或按空格重新开始</p>';
+  gameState="gameover";player=null;deleteSave();
+  var recs=saveRecord();var rk=recs.findIndex(function(r){return r.score===score&&r.wave===level;})+1;
+  var t=sessionStartTime?Math.floor((Date.now()-sessionStartTime)/1000):0;
+  var pm=Math.floor(t/60),ps=t%60;
+  var h='<h1>游戏结束</h1><p>最终得分: '+score+'</p><p>到达波次: '+level+'</p><p>消灭敌人: '+totalEnemiesKilled+'</p><p>能量币: '+energyCoins+' | 突破币: '+breakthroughCoins+'</p><p>击败Boss: '+defeatedBossCount+'</p><p>游戏时长: '+pm+'分'+ps+'秒</p>';
+  if(rk>0)h+='<p style="color:#ff0">历史排行第 '+rk+' 名!</p>';
+  h+='<p class="start" id="btn-restart">按空格重新开始</p><p class="start" id="btn-lb" style="font-size:16px;color:#0ff">查看排行榜</p>';
+  overlay.innerHTML=h;
   overlay.style.display="flex";
   bossHpBar.style.display="none";bossNameEl.style.display="none";
   waveBarFill.style.width="0%";restTimerEl.style.display="none";huntIndicator.style.display="none";crisisWarning.style.display="none";
@@ -959,8 +1047,8 @@ window.addEventListener("keydown",function(e){
   if(e.code==="KeyP"){
     if(restActive){
       if(gameState==="paused_shop"){gameState="paused";shopEl.style.display="none";}
-      else if(gameState==="playing"){gameState="paused";overlay.innerHTML='<h1>休整中</h1><p>剩余时间: '+Math.ceil(restTimer)+'s</p><p class="start">按P继续游戏</p>';overlay.style.display="flex";}
-      else if(gameState==="paused"){gameState="playing";overlay.style.display="none";}
+      else if(gameState==="playing"){gameState="paused";saveGame();overlay.innerHTML='<h1>休整中</h1><p>剩余时间: '+Math.ceil(restTimer)+'s</p><p style="color:#0f0">✔ 已保存</p><p class="start">按P继续游戏</p>';overlay.style.display="flex";}
+      else if(gameState==="paused"){gameState="playing";overlay.style.display="none";}else if(gameState==="paused_shop"){gameState="paused";shopEl.style.display="none";saveGame();}
     }else if(gameState==="playing"){
       // Can't pause outside rest - show feedback
       playSound(200,"square",0.05,0.03);
@@ -984,7 +1072,7 @@ canvas.addEventListener("touchstart",function(e){e.preventDefault();mouseX=e.tou
 canvas.addEventListener("touchend",function(e){e.preventDefault();keys.Click=false;},{passive:false});
 document.getElementById("shop-close").addEventListener("click",function(e){e.stopPropagation();if(gameState==="paused_shop"){shopEl.style.display="none";gameState="paused";}});
 
-initStars();initShopItems();gameLoop();
+initStars();initShopItems();showMainMenu();gameLoop();
 })();
 </script>
 </body>

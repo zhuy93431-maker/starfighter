@@ -299,10 +299,10 @@ var bossDefs=[
       b._t=(b._t||0)+1;if(!b._tx)b._tx=W/2;
       if(b._t%180===0)b._tx=Math.random()*(W-200)+100;b.x+=(b._tx-b.x)*0.02;b.y=50+Math.sin(b._t*0.008)*35;b.x=Math.max(80,Math.min(W-80,b.x));
       // Burst: 15f spiral, then 45f rest
-      var cycle4=b._t%75;
-      if(cycle4<12){
+      var cycle4=b._t%150;
+      if(cycle4<10){
         var dang=b._t*0.05;
-        for(var k=0;k<8;k++){var a=dang+k*Math.PI*0.25;var bspd4=1.8+Math.floor(defeatedBossCount/bossDefs.length)*0.4;enemyBullets.push({x:b.x,y:b.y+b.h*0.2,vx:Math.cos(a)*bspd4,vy:Math.sin(a)*bspd4,w:4,h:4,color:b.color});}
+        for(var k=0;k<6;k++){var a=dang+k*Math.PI*0.333;var bspd4=1.5+Math.floor(defeatedBossCount/bossDefs.length)*0.3;enemyBullets.push({x:b.x,y:b.y+b.h*0.2,vx:Math.cos(a)*bspd4,vy:Math.sin(a)*bspd4,w:4,h:4,color:b.color});}
       }
     }
   }

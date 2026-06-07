@@ -90,6 +90,20 @@ function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerH
 window.addEventListener("resize",resize);resize();
 
 var audioCtx;
+
+// === ERROR LOGGER ===
+var _errorLog=[];
+window.onerror=function(msg,src,line,col,err){
+  var entry={msg:msg,src:src||"",line:line||0,col:col||0,time:new Date().toISOString(),stack:err?err.stack:""};
+  _errorLog.push(entry);
+  if(_errorLog.length>50)_errorLog.shift();
+  // Also dump to console
+  if(typeof console!=="undefined")console.error("[SF]",msg,"at",src,line);
+  return false;
+};
+window._getErrorLog=function(){return _errorLog.slice();};
+window._clearErrorLog=function(){_errorLog=[];};
+// ====================
 function initAudio(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();}
 function playSound(freq,type,dur,vol,slide){
   if(!audioCtx)return;
@@ -423,12 +437,13 @@ function updateEffects(){
   updateEffectDisplay();
 }
 function updateEffectDisplay(){
+  var html="";
   if(missileLevel>0)html+='<div class="effect-tag" style="color:#f80">导弹 Lv.'+missileLevel+'</div>';
   if(dodgeLevel>0)html+='<div class="effect-tag" style="color:#8f8">闪避 '+dodgeLevel*10+'%</div>';
 
   var h="";var names={highDmg:"高伤",freeze:"冰冻",scoreX2:"双倍分",pierce:"穿透",slowTime:"减速"};
   for(var k in activeEffects){if(activeEffects.hasOwnProperty(k)){var v=activeEffects[k],n=names[k]||k;h+='<div class="effect-tag">'+n+' '+Math.ceil(v.timer/60)+'s</div>';}}
-  activeEffectsEl.innerHTML=h;
+  activeEffectsEl.innerHTML=html+h;
 }
 
 function drawShip(x,y,w,h,color,angle,shape){
@@ -752,7 +767,7 @@ function update(){
   for(var mi=0;mi<playerMissiles.length;mi++){
     var pm=playerMissiles[mi];pm.x+=pm.vx;pm.y+=pm.vy;pm.life--;
     // Check collision with enemies
-    for(var ei=0;ei<enemies.length;ei++){var en=enemies[ei];if(!en.dead&&Math.abs(pm.x-en.x)<en.w/2+6&&Math.abs(pm.y-en.y)<en.h/2+6){en.hp--;pm.life=0;createExplosion(pm.x,pm.y,"#f80",5);break;}}
+    for(var ei=0;ei<enemies.length;ei++){var en=enemies[ei];if(!en.dead&&Math.abs(pm.x-en.x)<en.w/2+6&&Math.abs(pm.y-en.y)<en.h/2+6){en.hp--;pm.life=0;if(en.hp<=0)killEnemy(en);else createExplosion(pm.x,pm.y,"#f80",5);break;}}
     if(pm.life>0&&boss&&!boss.dead&&Math.abs(pm.x-boss.x)<boss.w/2+6&&Math.abs(pm.y-boss.y)<boss.h/2+6){boss.hp-=2;pm.life=0;createExplosion(pm.x,pm.y,"#ff0",10);}
   }
   playerMissiles=playerMissiles.filter(function(m){return m.life>0&&m.x>0&&m.x<W&&m.y>0&&m.y<H;});
@@ -921,7 +936,7 @@ function showLeaderboard(){
       var r=h[k];var m="["+(k+1)+"]";
       lb+='<div style="color:#fff;padding:3px 8px;border-bottom:1px solid #333;">'+m+' 得分:'+r.score+' | 波次:'+r.level+' | 杀敌:'+(r.enemies||0)+' | '+r.date+'</div>';
     }
-    lb+='</div>';
+    lb+='</div>';var errCount=_errorLog.length;if(errCount>0){lb+='<div style="color:#f88;font-size:11px;margin-top:4px;">[!] '+errCount+' error(s) logged</div>';}
   }
   lb+='<p class="start" style="pointer-events:auto;cursor:pointer;" onclick="event.stopPropagation();overlay.style.display=\'none\';if(gameState===\'menu\'){startGame();}">关闭</p>';
   overlay.innerHTML=lb;
@@ -943,7 +958,7 @@ function gameOver(){
     var r=h[k];var m="["+(k+1)+"]";
     lb+='<div style="color:#fff;padding:2px 6px;border-bottom:1px solid #333;">'+m+' 得分:'+r.score+' | 波次:'+r.level+' | 杀敌:'+r.enemies+' | '+r.date+'</div>';
   }
-  lb+='</div>';
+  lb+='</div>';var errCount=_errorLog.length;if(errCount>0){lb+='<div style="color:#f88;font-size:11px;margin-top:4px;">[!] '+errCount+' error(s) logged</div>';}
   overlay.innerHTML='<h1>游戏结束</h1><p>最终得分: '+score+'</p><p>到达波次: '+level+' | 消灭敌人: '+(totalKills||0)+'</p><p>能量币: '+energyCoins+' | 突破币: '+breakthroughCoins+'</p><p>击败Boss: '+defeatedBossCount+'</p>'+lb+'<p class="start">点击或按空格重新开始</p>';
   overlay.style.display="flex";
   bossHpBar.style.display="none";bossNameEl.style.display="none";
@@ -1033,7 +1048,7 @@ var _loadGame=function(){
 };
 var _hasSave=function(){try{return!!localStorage.getItem(_SAVE);}catch(e){return false;}};
 var _deleteSave=function(){try{localStorage.removeItem(_SAVE);}catch(e){}};
-window._saveGame=_saveGame;window._loadGame=_loadGame;window._hasSave=_hasSave;window._deleteSave=_deleteSave;
+window._saveGame=_saveGame;window._loadGame=_loadGame;window._hasSave=_hasSave;window._deleteSave=_deleteSave;window._debugSetMissile=function(lv){missileLevel=lv;missileTimer=0;playerMissiles=[];};window._debugSetLaser=function(){activeEffects.laser={timer:99999,breakthrough:true};laserTimer=0;};window._debugGetState=function(){return{missileLevel:missileLevel,enemyCount:enemies.length,missileCount:playerMissiles.length,score:score,totalKills:totalKills,errorLogLen:_errorLog.length};};window._debugSpawnEnemies=function(count,x,y){for(var i=0;i<count;i++){enemies.push({x:x+i*35||300+i*35,y:y||250,w:30,h:30,hp:5,dead:false,color:"#f44",type:0,score:100,speedX:0,speedY:0});}};
 
 })();
 </script>

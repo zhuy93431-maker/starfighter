@@ -125,7 +125,7 @@ var playerMissiles=[];
 var missileTimer=0;
 var laserTimer=0;
 var activeLaser=null;
-var missileLevel=0;
+var missileLevel=0;var laserLevel=0;var orbitLevel=0;var orbitBalls=[];var shieldHP=0;var maxLives=6;
 var nukeUseCount=0;
 var nukeDisabledWaves=0;
 var dodgeLevel=0;
@@ -146,9 +146,9 @@ var playerMoving=false;   // track movement per frame
 // ---- END NEW MECHANICS ----
 
 var skillDefs=[
-  {id:"heal",name:"生命恢复",desc:"恢复1点生命值",icon:"♥",color:"#0f0",initUnlocked:true,initProb:20},
+  {id:"heal",name:"生命恢复",desc:"恢复1点生命值(突破:最大7HP)",icon:"♥",color:"#0f0",initUnlocked:true,initProb:20},
   {id:"power",name:"火力升级",desc:"子弹+1排(最高10级·突破币解锁LV6-10)",icon:"▲",color:"#ff0",initUnlocked:true,initProb:15,maxLv:10,breakLv:5},
-  {id:"shield",name:"能量护盾",desc:"10秒无敌护盾",icon:"◈",color:"#0ff",initUnlocked:true,initProb:10},
+  {id:"shield",name:"能量护盾",desc:"护盾值吸收伤害(突破:500HP·子弹-100HP)",icon:"◈",color:"#0ff",initUnlocked:true,initProb:10,maxLv:15,breakLv:10},
   {id:"highDmg",name:"高伤弹药",desc:"2倍伤害 持续15秒",icon:"◆",color:"#f80",initUnlocked:true,initProb:12},
   {id:"coinBonus",name:"金币加成",desc:"立即获得200能量币",icon:"$",color:"#ff0",initUnlocked:false,unlockCost:300,initProb:8},
   {id:"freeze",name:"冰冻减速",desc:"所有敌人减速80% 持续8秒",icon:"❄",color:"#8cf",initUnlocked:false,unlockCost:500,initProb:7},
@@ -156,8 +156,9 @@ var skillDefs=[
   {id:"pierce",name:"穿透弹",desc:"子弹穿透敌人 持续15秒",icon:"⚡",color:"#ff0",initUnlocked:false,unlockCost:1000,initProb:6},
   {id:"scoreX2",name:"分数加倍",desc:"2倍得分 持续20秒",icon:"★",color:"#f80",initUnlocked:false,unlockCost:600,initProb:6},
   {id:"slowTime",name:"时间减速",desc:"敌弹速度减半 持续6秒(突破:10秒)",icon:"⏱",color:"#8f8",initUnlocked:false,unlockCost:1200,initProb:5},
-  {id:"missile",name:"导弹支援",desc:"永久导弹支援·叠加缩短间隔(10s→1s)",icon:"▸",color:"#f80",initUnlocked:false,unlockCost:800,initProb:8},
-  {id:"laser",name:"激光炮",desc:"每10秒发射粗激光穿透全屏(突破:6秒)",icon:"‖",color:"#f0f",initUnlocked:false,unlockCost:100000,initProb:4,special:true,specialCoinCost:1},
+  {id:"missile",name:"导弹支援",desc:"永久导弹·叠加缩短间隔(突破LV10→15:0.1s)",icon:"▸",color:"#f80",initUnlocked:false,unlockCost:800,initProb:8,maxLv:15,breakLv:10},
+  {id:"laser",name:"激光炮",desc:"永久激光·叠加缩短间隔(突破:长期持有)",icon:"‖",color:"#f0f",initUnlocked:false,unlockCost:100000,initProb:4,special:true,specialCoinCost:1,maxLv:15,breakLv:10},
+  {id:"orbit",name:"回旋弹",desc:"环绕能量球碰撞敌人(突破:加速)8万币解锁",icon:"◎",color:"#ff0",initUnlocked:false,unlockCost:80000,initProb:0,maxLv:10,breakLv:5},
   {id:"dodge",name:"闪避",desc:"概率闪避攻击(最高50%·需突破币解锁)",icon:"↗",color:"#8f8",initUnlocked:false,unlockCost:0,initProb:0,maxLv:5,special:true,specialCoinCost:1}
 ];
 
@@ -212,7 +213,7 @@ function upgradeShopItem(id){
     var cost=s.upgradeCost;
     if(energyCoins<cost)return;
     energyCoins-=cost;s.probLevel++;s.probability=Math.min(s.maxProb,s.probability+5);
-    if(s.id==="dodge")dodgeLevel=s.probLevel;
+    if(s.id==="dodge")dodgeLevel=Math.min(5,s.probLevel);
     playSound(1000,"sine",0.15,0.08,300);
   }
   updateShopCosts();renderShopUI();
@@ -236,7 +237,7 @@ function renderShopUI(){
       costHtml='<div class="scost">升级: '+s.upgradeCost+' 币 → '+Math.min(s.maxProb,s.probability+5)+'%</div>';
     }
     var extra=s.breakthroughActive?' <span style="color:#f80">[突破]</span>':"";
-    html+='<div class="shop-item'+cls+'" onclick="window._upgrade(\''+s.id+'\')"><div class="sname">'+s.icon+' '+s.name+extra+'</div><div class="sdesc">'+s.desc+'</div><div class="sprob">'+(s.id==="dodge"?'闪避率: '+dodgeLevel*10+'% / 50%':'当前掉落率: '+s.probability+'% / '+s.maxProb+'%')+'</div>'+costHtml+'</div>';
+    html+='<div class="shop-item'+cls+'" onclick="window._upgrade(\''+s.id+'\')"><div class="sname">'+s.icon+' '+s.name+extra+'</div><div class="sdesc">'+s.desc+'</div><div class="sprob">'+(s.id==="dodge"?'闪避率: '+dodgeLevel*10+'% / 50%':(s.id==="orbit"?'当前等级: '+orbitLevel+' / 10':'当前掉落率: '+s.probability+'% / '+s.maxProb+'%'))+'</div>'+costHtml+'</div>';
   }
   shopGrid.innerHTML=html;
   shopCoinsEl.textContent="能量币: "+energyCoins+" | 💎 突破币: "+breakthroughCoins;
@@ -340,7 +341,7 @@ var enemyTypes=[
   },
   // Wave 250+
   {name:"冲撞者",color:"#f44",hp:8,score:600,speed:4.5,size:32,shape:"diamond",fireRate:0.0,waveMin:250,
-    behave:function(e){if(!e._chg)e._chg=0;if(player){e._chg+=0.02;var dx=player.x-e.x,dy=player.y-e.y,d=Math.sqrt(dx*dx+dy*dy)||1;e.x+=dx/d*Math.min(e._chg,4);e.y+=dy/d*Math.min(e._chg,4);}if(Math.abs(e.x-player.x)<30&&Math.abs(e.y-player.y)<30){e.hp=0;}}
+    behave:function(e){if(!e._chg)e._chg=0;if(player){e._chg+=0.008;var dx=player.x-e.x,dy=player.y-e.y,d=Math.sqrt(dx*dx+dy*dy)||1;e.x+=dx/d*Math.min(e._chg,2);e.y+=dy/d*Math.min(e._chg,2);}if(Math.abs(e.x-player.x)<30&&Math.abs(e.y-player.y)<30){e.hp=0;}}
   },
   // Wave 300+
   {name:"织网者",color:"#f80",hp:4,score:350,speed:1.5,size:22,shape:"circle",fireRate:0.03,waveMin:300,
@@ -438,7 +439,7 @@ function updateEffects(){
 }
 function updateEffectDisplay(){
   var html="";
-  if(missileLevel>0)html+='<div class="effect-tag" style="color:#f80">导弹 Lv.'+missileLevel+'</div>';
+  if(missileLevel>0)html+='<div class="effect-tag" style="color:#f80">导弹 Lv.'+missileLevel+'</div>';if(laserLevel>0)html+='<div class="effect-tag" style="color:#f0f">激光 Lv.'+laserLevel+'</div>';if(orbitLevel>0)html+='<div class="effect-tag" style="color:#ff0">回旋 Lv.'+orbitLevel+'</div>';if(missileLevel>0)html+='<div class="effect-tag" style="color:#f80">导弹 Lv.'+missileLevel+'</div>';
   if(dodgeLevel>0)html+='<div class="effect-tag" style="color:#8f8">闪避 '+dodgeLevel*10+'%</div>';
 
   var h="";var names={highDmg:"高伤",freeze:"冰冻",scoreX2:"双倍分",pierce:"穿透",slowTime:"减速"};
@@ -544,7 +545,7 @@ function update(){
   if((keys.Space||keys.Click)&&fireTimer<=0){
     var cd=player.powerLevel>=7?4:player.powerLevel>=5?5:player.powerLevel>=3?6:player.powerLevel>=2?10:15;fireTimer=cd;
     var bx=player.x,by=player.y-player.h/2;var pdmg=activeEffects.highDmg?(activeEffects.highDmg.dmgMul||2):1;
-    if(player.powerLevel>=9){
+    if(player.powerLevel>=10){for(var fi=-5;fi<=5;fi++){var fcol1=fi%2===0?"#f0f":"#ff0";var fdm1=fi%2===0?pdmg*3:pdmg*2;bullets.push({x:bx+fi*7,y:by+(fi%2===0?-10:-5),vx:fi*0.3,vy:fi%2===0?-11.5:-11,w:3,h:10,color:fcol1,dmg:fdm1,pierce:!!activeEffects.pierce});}bullets.push({x:bx,y:by-12,vx:0,vy:-13,w:5,h:14,color:"#fff",dmg:pdmg*5,pierce:!!activeEffects.pierce});}else if(player.powerLevel>=9){
       for(var fi=-4;fi<=4;fi++){var fcol=fi%2===0?"#f0f":"#ff0";var fdm=fi%2===0?pdmg*3:pdmg*2;
         bullets.push({x:bx+fi*7,y:by+(fi%2===0?-8:-3),vx:fi*0.25,vy:fi%2===0?-11:-10.5,w:3,h:10,color:fcol,dmg:fdm,pierce:!!activeEffects.pierce});}
       bullets.push({x:bx,y:by-10,vx:0,vy:-12,w:5,h:14,color:"#fff",dmg:pdmg*4,pierce:!!activeEffects.pierce});
@@ -684,7 +685,7 @@ function update(){
       var eb=enemyBullets[i];if(eb.hit)continue;
       if(Math.abs(eb.x-player.x)<player.w*0.3+4&&Math.abs(eb.y-player.y)<player.h*0.35+6){
         eb.hit=true;
-        if(player.shieldActive){createExplosion(eb.x,eb.y,"#0ff",5);playSound(1000,"triangle",0.05,0.03);player.shieldActive=false;invincibleTimer=30;}
+        if(player.shieldActive){var bt0=getShopBreakthrough("shield");if(bt0&&shieldHP>0){createExplosion(eb.x,eb.y,"#0ff",5);playSound(1000,"triangle",0.05,0.03);shieldHP-=100;if(shieldHP<=0){player.shieldActive=false;shieldHP=0;invincibleTimer=30;}}else if(!bt0){createExplosion(eb.x,eb.y,"#0ff",5);playSound(1000,"triangle",0.05,0.03);player.shieldActive=false;invincibleTimer=30;}}
         else if(dodgeLevel>0&&Math.random()<dodgeLevel*0.1){createExplosion(eb.x,eb.y,"#8f8",15);playSound(600,"sine",0.15,0.05,400);invincibleTimer=30;}else{createExplosion(eb.x,eb.y,"#f44",8);lives--;playSound(80,"sawtooth",0.3,0.1,-50);invincibleTimer=60;shakeTimer=20;shakeIntensity=8;if(lives<=0){gameOver();return;}}
         break;
       }
@@ -698,7 +699,7 @@ function update(){
       if(Math.abs(he.x-player.x)<player.w*0.35+he.w*0.35&&Math.abs(he.y-player.y)<player.h*0.35+he.h*0.35){
         if(he===boss){boss.hp-=5;createExplosion(player.x,player.y,"#ff0",10);}
         else{killEnemy(he);}
-        if(player.shieldActive){player.shieldActive=false;invincibleTimer=30;playSound(1000,"triangle",0.05,0.03);}
+        if(player.shieldActive){var bt1=getShopBreakthrough("shield");if(bt1&&shieldHP>0){shieldHP-=200;if(shieldHP<=0){player.shieldActive=false;shieldHP=0;invincibleTimer=30;}playSound(1000,"triangle",0.05,0.03);}else if(!bt1){player.shieldActive=false;invincibleTimer=30;playSound(1000,"triangle",0.05,0.03);}}
         else{lives--;playSound(80,"sawtooth",0.3,0.1,-50);invincibleTimer=60;shakeTimer=20;shakeIntensity=8;if(lives<=0){gameOver();return;}}
       }
     }
@@ -713,9 +714,9 @@ function update(){
     if(Math.abs(p.x-player.x)<22&&Math.abs(p.y-player.y)<28){
       p.collected=true;playSound(1200,"sine",0.2,0.08,200);
       switch(p.type){
-        case"heal":{var bt=getShopBreakthrough("heal");lives=Math.min(bt?7:6,lives+1);break;}
+        case"heal":{var bt=getShopBreakthrough("heal");maxLives=bt?7:6;lives=Math.min(maxLives,lives+1);break;}
         case"power":player.powerLevel=Math.min(10,player.powerLevel+1);break;
-        case"shield":{var bt=getShopBreakthrough("shield");player.shieldActive=true;player.shieldTimer=bt?900:600;break;}
+        case"shield":{var bt=getShopBreakthrough("shield");if(bt){if(!player.shieldActive){player.shieldActive=true;shieldHP=500;}else{shieldHP=Math.min(500,shieldHP+100);}}else{player.shieldActive=true;player.shieldTimer=600;}break;}
         case"highDmg":{var bt=getShopBreakthrough("highDmg");addEffect("highDmg",bt?1200:900);if(bt)activeEffects.highDmg.dmgMul=3;break;}
         case"coinBonus":{var bt=getShopBreakthrough("coinBonus");energyCoins+=bt?500:200;createExplosion(player.x,player.y,"#ff0",bt?20:10);break;}
         case"freeze":{var bt=getShopBreakthrough("freeze");addEffect("freeze",bt?720:480);break;}
@@ -730,19 +731,20 @@ function update(){
         case"pierce":{var bt=getShopBreakthrough("pierce");addEffect("pierce",bt?99999:900);break;}
         case"scoreX2":{var bt=getShopBreakthrough("scoreX2");addEffect("scoreX2",bt?1800:1200);if(bt)activeEffects.scoreX2.multiplier=4;break;}
         case"slowTime":{var bt=getShopBreakthrough("slowTime");addEffect("slowTime",bt?600:360);break;}
-        case"missile":{missileLevel=Math.min(10,missileLevel+1);playerMissiles=[];createExplosion(player.x,player.y,"#f80",15);playSound(800,"sine",0.2,0.15,200);break;}
-        case"laser":{var bt=getShopBreakthrough("laser");addEffect("laser",bt?1800:900);if(bt)activeEffects.laser={timer:bt?1800:900,breakthrough:true};break;}
+        case"missile":{var mbt0=getShopBreakthrough("missile");missileLevel=Math.min(mbt0?15:10,missileLevel+1);playerMissiles=[];createExplosion(player.x,player.y,"#f80",15);playSound(800,"sine",0.2,0.15,200);break;}
+        case"laser":{var bt=getShopBreakthrough("laser");laserLevel=Math.min(bt?15:10,laserLevel+1);createExplosion(player.x,player.y,"#f0f",15);playSound(900,"sine",0.2,0.15,200);break;}
+        case"orbit":{var obt=getShopBreakthrough("orbit");orbitLevel=Math.min(obt?10:5,orbitLevel+1);if(orbitBalls.length<5)orbitBalls.push({angle:orbitBalls.length*(Math.PI*2/5),dist:35});createExplosion(player.x,player.y,"#f0f",10);playSound(700,"sine",0.15,0.1,300);break;}
       }
     }
   }
   powerUps=powerUps.filter(function(p){return!p.collected&&p.life>0&&p.y<H+30;});
-  if(player.shieldActive&&player.shieldTimer>0){player.shieldTimer--;if(player.shieldTimer<=0)player.shieldActive=false;}
+  if(player.shieldActive){var bts0=getShopBreakthrough("shield");if(!bts0&&player.shieldTimer>0){player.shieldTimer--;if(player.shieldTimer<=0)player.shieldActive=false;}}
 
   // ---- MISSILE SUPPORT (permanent, level-based) ----
   if(missileLevel>0&&player){
     missileTimer++;
-    var levels=[600,480,360,270,200,150,110,80,60,60]; // frames between shots (10s -> 1s)
-    var missileRate=levels[Math.min(missileLevel-1,9)];
+    var levels=[600,480,360,270,200,150,110,80,60,60,48,36,24,12,6]; // frames (10s -> 0.1s)
+    var missileRate=levels[Math.min(missileLevel-1,14)];
     if(missileTimer>=missileRate){
       missileTimer=0;
       for(var ms=-1;ms<=1;ms+=2){
@@ -772,10 +774,23 @@ function update(){
   }
   playerMissiles=playerMissiles.filter(function(m){return m.life>0&&m.x>0&&m.x<W&&m.y>0&&m.y<H;});
 
-  // ---- LASER CANNON ----
-  if(activeEffects.laser&&player){
+  // ---- ORBIT BALLS ----
+  if(orbitLevel>0&&player){
+    var orbitSpeed=orbitLevel>5?0.06+(orbitLevel-5)*0.03:0.04;
+    for(var oi=0;oi<orbitBalls.length;oi++){
+      orbitBalls[oi].angle+=orbitSpeed;
+      orbitBalls[oi].x=player.x+Math.cos(orbitBalls[oi].angle)*35;
+      orbitBalls[oi].y=player.y+Math.sin(orbitBalls[oi].angle)*35;
+      for(var ei=0;ei<enemies.length;ei++){var en=enemies[ei];if(!en.dead&&Math.abs(orbitBalls[oi].x-en.x)<en.w/2+8&&Math.abs(orbitBalls[oi].y-en.y)<en.h/2+8){en.hp--;if(en.hp<=0)killEnemy(en);else createExplosion(orbitBalls[oi].x,orbitBalls[oi].y,"#f0f",3);}}
+      if(boss&&!boss.dead&&Math.abs(orbitBalls[oi].x-boss.x)<boss.w/2+8&&Math.abs(orbitBalls[oi].y-boss.y)<boss.h/2+8){boss.hp-=1;createExplosion(orbitBalls[oi].x,orbitBalls[oi].y,"#ff0",5);}
+    }
+  }
+
+  // ---- LASER CANNON (permanent, level-based) ----
+  if(laserLevel>0&&player){
     laserTimer++;
-    var laserRate=(activeEffects.laser&&activeEffects.laser.breakthrough)?360:600; // 6s or 10s
+    var laserRates=[600,480,360,270,200,150,110,80,60,60,48,36,24,12,6];
+    var laserRate=laserRates[Math.min(laserLevel-1,14)];
     if(laserTimer>=laserRate){
       laserTimer=0;
       activeLaser={x:player.x,y:player.y,life:60}; // 1 second
@@ -820,7 +835,7 @@ function update(){
   uiScore.textContent="得分: "+score+" | 💎"+breakthroughCoins;
   uiCoins.textContent="能量币: "+energyCoins+" | 💎"+breakthroughCoins;
   uiBtcoins.textContent="突破币: "+breakthroughCoins;
-  uiLives.textContent="生命: "+"\u2665".repeat(Math.max(0,lives))+"\u2661".repeat(Math.max(0,5-lives));
+  uiLives.textContent="生命: "+"\u2665".repeat(Math.max(0,lives))+"\u2661".repeat(Math.max(0,maxLives-lives));
   uiLevel.textContent="波次: "+level+(crisisWave?" ⚡危机":"");
 }
 
@@ -833,6 +848,13 @@ function render(){
   for(var i=0;i<stars.length;i++){var s=stars[i];ctx.globalAlpha=s.alpha;ctx.fillStyle="#fff";ctx.fillRect(s.x,s.y,s.size,s.size);}
   ctx.globalAlpha=1;
 
+  // ---- Draw orbit balls ----
+  for(var oi=0;oi<orbitBalls.length;oi++){
+    var ob=orbitBalls[oi];if(!ob||!player)continue;
+    ctx.fillStyle="#f0f";ctx.shadowColor="#f0f";ctx.shadowBlur=8;
+    ctx.beginPath();ctx.arc(ob.x,ob.y,5,0,Math.PI*2);ctx.fill();
+    ctx.shadowBlur=0;
+  }
   // ---- Draw missiles ----
   for(var mi=0;mi<playerMissiles.length;mi++){
     var pm=playerMissiles[mi];ctx.save();ctx.translate(pm.x,pm.y);
@@ -892,7 +914,7 @@ function render(){
 
     if(invincibleTimer<=0||Math.floor(invincibleTimer/4)%2===0){
       drawShip(player.x,player.y,player.w,player.h,"#0ff",0,null);
-      if(player.shieldActive){ctx.beginPath();ctx.arc(player.x,player.y,player.w*0.55,0,Math.PI*2);ctx.strokeStyle="#0ff";ctx.lineWidth=2;ctx.globalAlpha=0.5+Math.sin(Date.now()*0.01)*0.3;ctx.stroke();ctx.globalAlpha=1;}
+      if(player.shieldActive){ctx.beginPath();ctx.arc(player.x,player.y,player.w*0.55,0,Math.PI*2);ctx.strokeStyle="#0ff";ctx.lineWidth=2;ctx.globalAlpha=0.5+Math.sin(Date.now()*0.01)*0.3;ctx.stroke();ctx.globalAlpha=1;var btsr0=getShopBreakthrough("shield");if(btsr0&&shieldHP>0){ctx.fillStyle="rgba(0,255,255,0.2)";ctx.beginPath();ctx.arc(player.x,player.y,player.w*0.5,0,Math.PI*2);ctx.fill();ctx.fillStyle="#0ff";ctx.font="10px monospace";ctx.textAlign="center";ctx.fillText(shieldHP,player.x,player.y-player.w*0.55-4);}}
     }
     // MECHANISM 3: idle warning indicator
     if(playerIdleTime>120&&playerIdleTime%30<15){
@@ -908,7 +930,7 @@ function render(){
 
 function startGame(){
   initAudio();initShopItems();
-  score=0;lives=3;level=1;energyCoins=0;defeatedBossCount=0;
+  score=0;lives=3;level=1;energyCoins=0;defeatedBossCount=0;maxLives=6;
   player=createPlayer();enemies=[];bullets=[];enemyBullets=[];particles=[];powerUps=[];boss=null;
   fireTimer=0;enemySpawnTimer=30;invincibleTimer=0;shakeTimer=0;
   player.powerLevel=1;player.shieldActive=false;player.shieldTimer=0;
@@ -918,7 +940,7 @@ function startGame(){
   waveProgress=0;waveKills=0;playerIdleTime=0;lastPlayerX=player.x;lastPlayerY=player.y;
   markCount=0;huntMode=false;restTimer=0;restActive=false;
   breakthroughCoins=0;totalKills=0;playerMissiles=[];missileTimer=0;laserTimer=0;activeLaser=null;
-  missileLevel=0;nukeUseCount=0;nukeDisabledWaves=0;dodgeLevel=0;
+  missileLevel=0;laserLevel=0;orbitLevel=0;orbitBalls=[];shieldHP=0;nukeUseCount=0;nukeDisabledWaves=0;dodgeLevel=0;
   crisisWave=false;crisisSpawnBoost=0;lastWave=1;playerMoving=false;
   waveBarFill.style.width="0%";restTimerEl.style.display="none";
   huntIndicator.style.display="none";crisisWarning.style.display="none";
@@ -1032,7 +1054,7 @@ var _saveGame=function(){
 var _loadGame=function(){
   var s;try{s=JSON.parse(localStorage.getItem(_SAVE));}catch(e){return;}
   if(!s)return;
-  initAudio();score=s.score||0;lives=s.lives||3;level=s.level||1;energyCoins=s.energyCoins||0;
+  initAudio();score=s.score||0;lives=s.lives||3;level=s.level||1;energyCoins=s.energyCoins||0;maxLives=6;
   defeatedBossCount=s.defeatedBossCount||0;breakthroughCoins=s.breakthroughCoins||0;
   waveProgress=s.waveProgress||0;
   player=createPlayer();player.powerLevel=s.powerLevel||1;player.x=s.x||W/2;player.y=s.y||H-100;
@@ -1048,7 +1070,7 @@ var _loadGame=function(){
 };
 var _hasSave=function(){try{return!!localStorage.getItem(_SAVE);}catch(e){return false;}};
 var _deleteSave=function(){try{localStorage.removeItem(_SAVE);}catch(e){}};
-window._saveGame=_saveGame;window._loadGame=_loadGame;window._hasSave=_hasSave;window._deleteSave=_deleteSave;window._debugSetMissile=function(lv){missileLevel=lv;missileTimer=0;playerMissiles=[];};window._debugSetLaser=function(){activeEffects.laser={timer:99999,breakthrough:true};laserTimer=0;};window._debugGetState=function(){return{missileLevel:missileLevel,enemyCount:enemies.length,missileCount:playerMissiles.length,score:score,totalKills:totalKills,errorLogLen:_errorLog.length};};window._debugSpawnEnemies=function(count,x,y){for(var i=0;i<count;i++){enemies.push({x:x+i*35||300+i*35,y:y||250,w:30,h:30,hp:5,dead:false,color:"#f44",type:0,score:100,speedX:0,speedY:0});}};
+window._saveGame=_saveGame;window._loadGame=_loadGame;window._hasSave=_hasSave;window._deleteSave=_deleteSave;window._debugSetMissile=function(lv){missileLevel=lv;missileTimer=0;playerMissiles=[];};window._debugSetLaser=function(){activeEffects.laser={timer:99999,breakthrough:true};laserTimer=0;};window._debugGetState=function(){return{missileLevel:missileLevel,laserLevel:laserLevel,orbitLevel:orbitLevel,enemyCount:enemies.length,missileCount:playerMissiles.length,orbitCount:orbitBalls.length,score:score,totalKills:totalKills,shieldHP:shieldHP,maxLives:maxLives,errorLogLen:_errorLog.length};};window._debugSpawnEnemies=function(count,x,y){for(var i=0;i<count;i++){enemies.push({x:x+i*35||300+i*35,y:y||250,w:30,h:30,hp:5,dead:false,color:"#f44",type:0,score:100,speedX:0,speedY:0});}};
 
 })();
 </script>
